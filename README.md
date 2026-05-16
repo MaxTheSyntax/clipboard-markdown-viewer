@@ -1,5 +1,7 @@
 # Clipboard Markdown Viewer
 
+### Available at [markdown.syntaxworks.top](https://markdown.syntaxworks.top/)
+
 Single file web app to render markdown from your clipboard.
 
 ## Usage
