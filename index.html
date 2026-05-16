@@ -618,65 +618,70 @@
   const hasClipboardRead = !!(navigator.clipboard && navigator.clipboard.readText);
 
   // On file:// origins the browser cannot persistently remember clipboard
-  // permission, so every readText() re-prompts. Disable polling there and
+  // permission, so every readText() re-prompts. Disable auto-read there and
   // rely on the manual paste flow, which does not trigger a prompt.
-  const canPoll = !isFile && hasClipboardRead;
+  const canAutoRead = !isFile && hasClipboardRead;
 
-  let polling = false;
-  let intervalId = null;
+  // "Live" here means: read once now, and re-read whenever the page regains
+  // focus. Browsers block clipboard reads while the tab is unfocused,
+  // so polling on an interval would just fail in the background.
+  let liveEnabled = false;
 
   async function readClipboard() {
     if (!hasClipboardRead) throw new Error('Clipboard API unavailable');
     return navigator.clipboard.readText();
   }
 
-  async function tick() {
+  async function checkPermissionState() {
+    if (!navigator.permissions || !navigator.permissions.query) return 'prompt';
+    try {
+      const r = await navigator.permissions.query({ name: 'clipboard-read' });
+      return r.state; // 'granted' | 'denied' | 'prompt'
+    } catch {
+      return 'prompt';
+    }
+  }
+
+  async function refreshFromClipboard({ silent = false } = {}) {
+    if (!canAutoRead) return;
     try {
       const text = await readClipboard();
       hideBanner();
       if (text !== lastText) { lastText = text; render(text); }
-      setStatus('Live - watching clipboard', 'live');
-    } catch (err) {
-      stopPolling();
+      setStatus('Live - reads on focus', 'live');
+    } catch {
+      liveEnabled = false;
       setStatus('Permission needed', 'error');
-      showBanner('Could not read clipboard automatically. Use Paste or press Ctrl+V instead.');
+      if (!silent) showBanner('Could not read clipboard. Click Live to grant permission, or press Ctrl+V to paste manually.');
     }
   }
 
-  async function startPolling() {
-    if (!canPoll) {
+  async function enableLive() {
+    if (!canAutoRead) {
       showBanner(
         isFile
-          ? 'Live clipboard watching is disabled on file:// pages because the browser cannot remember the permission. Press Ctrl+V (or use Paste) - your notes will still render instantly.'
+          ? 'Automatic clipboard reading is disabled on file:// pages because the browser cannot remember the permission. Press Ctrl+V (or use Paste) - your notes will still render instantly.'
           : 'Your browser does not support clipboard reading. Use Paste or Ctrl+V instead.'
       );
       setStatus('Manual paste only', 'warn');
       return;
     }
-    if (polling) return;
-    polling = true;
-    await tick();
-    if (polling) intervalId = setInterval(tick, 800);
-  }
-  function stopPolling() {
-    polling = false;
-    if (intervalId) { clearInterval(intervalId); intervalId = null; }
-  }
-
-  grantBtn.addEventListener('click', async () => {
-    if (!canPoll) { startPolling(); return; }
     try {
       await readClipboard();
+      liveEnabled = true;
       hideBanner();
-      startPolling();
+      await refreshFromClipboard();
     } catch {
+      liveEnabled = false;
       setStatus('Permission denied', 'error');
       showBanner('Clipboard read was denied. You can still press Ctrl+V or click Paste to view notes manually.');
     }
-  });
+  }
+
+  grantBtn.addEventListener('click', enableLive);
 
   pasteBtn.addEventListener('click', async () => {
-    if (!canPoll) {
+    if (!canAutoRead) {
       showBanner('Press Ctrl+V (or Cmd+V) anywhere on this page to paste - the browser blocks programmatic clipboard reads here.');
       return;
     }
@@ -694,15 +699,18 @@
     const text = e.clipboardData && e.clipboardData.getData('text/plain');
     if (text != null) {
       lastText = text; render(text); hideBanner();
-      setStatus(canPoll && polling ? 'Live - watching clipboard' : 'Pasted', canPoll && polling ? 'live' : 'warn');
+      setStatus(liveEnabled ? 'Live - reads on focus' : 'Pasted', 'live');
     }
   });
 
-  // Re-check on focus / visibility so changes made while away are picked up.
+  // Re-read whenever the page regains focus. This is the live-update path:
+  // the user copies elsewhere, switches back, and the page is up to date.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && polling) tick();
+    if (document.visibilityState === 'visible' && liveEnabled) refreshFromClipboard({ silent: true });
   });
-  window.addEventListener('focus', () => { if (polling) tick(); });
+  window.addEventListener('focus', () => {
+    if (liveEnabled) refreshFromClipboard({ silent: true });
+  });
 
   // ---------- Initial UX ----------
   if (isFile) {
@@ -715,6 +723,14 @@
     grantBtn.style.display = 'none';
   } else {
     setStatus('Idle - click Live to watch');
+    // If permission has already been granted in a previous visit, read once
+    // on load and start listening for focus events. No prompt is triggered.
+    checkPermissionState().then(state => {
+      if (state === 'granted') {
+        liveEnabled = true;
+        refreshFromClipboard({ silent: true });
+      }
+    });
   }
 })();
 </script>
