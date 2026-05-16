@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Syntax's Clipboard Markdown Viewer.</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/common.min.js"></script>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --surface: #ffffff;
+    --fg: #1f1f1f;
+    --muted: #6b6b6b;
+    --subtle: #efeeec;
+    --border: #e5e3df;
+    --accent: #2563eb;
+    --accent-fg: #ffffff;
+    --code-bg: #f5f4f1;
+    --code-border: #ebe9e4;
+    --hl-keyword: #af00db;
+    --hl-string: #a31515;
+    --hl-comment: #6a737d;
+    --hl-number: #098658;
+    --hl-fn: #795e26;
+    --hl-tag: #800000;
+    --shadow-sm: 0 1px 2px rgba(15, 15, 15, 0.04), 0 1px 1px rgba(15, 15, 15, 0.03);
+    --shadow-lg: 0 10px 30px rgba(15, 15, 15, 0.08), 0 4px 10px rgba(15, 15, 15, 0.04);
+  }
+  html[data-theme="dark"] {
+    --bg: #0f0f10;
+    --surface: #1a1a1c;
+    --fg: #e8e6e3;
+    --muted: #9b9893;
+    --subtle: #232325;
+    --border: #2c2c2f;
+    --accent: #6ea8fe;
+    --accent-fg: #0f0f10;
+    --code-bg: #18181a;
+    --code-border: #2c2c2f;
+    --hl-keyword: #c586c0;
+    --hl-string: #ce9178;
+    --hl-comment: #6a9955;
+    --hl-number: #b5cea8;
+    --hl-fn: #dcdcaa;
+    --hl-tag: #569cd6;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.5), 0 4px 10px rgba(0, 0, 0, 0.3);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.65 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    transition: background 200ms ease, color 200ms ease;
+  }
+
+  /* --- Floating control bar --- */
+  .toolbar {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    box-shadow: var(--shadow-lg);
+    opacity: 1;
+    transition: opacity 400ms ease, transform 400ms ease;
+  }
+  .toolbar.hidden {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+    pointer-events: none;
+  }
+  .tb-group {
+    display: flex; align-items: center; gap: 2px;
+    padding: 0 4px;
+  }
+  .tb-group + .tb-group {
+    border-left: 1px solid var(--border);
+    margin-left: 2px; padding-left: 6px;
+  }
+  .tb-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    padding: 0 6px;
+    user-select: none;
+  }
+  .tb-btn {
+    appearance: none;
+    background: transparent;
+    color: var(--fg);
+    border: none;
+    border-radius: 999px;
+    padding: 7px 12px;
+    font: 500 13px/1 inherit;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: background 150ms ease, color 150ms ease;
+  }
+  .tb-btn:hover { background: var(--subtle); }
+  .tb-btn[aria-pressed="true"] {
+    background: var(--fg);
+    color: var(--bg);
+  }
+  .tb-btn.primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+  .tb-btn.primary:hover { filter: brightness(1.08); }
+  .tb-btn svg { width: 14px; height: 14px; }
+
+  /* Width slider */
+  .tb-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 140px; height: 4px;
+    background: var(--subtle);
+    border-radius: 999px;
+    outline: none;
+    margin: 0 8px;
+    cursor: pointer;
+  }
+  .tb-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--fg);
+    border: 2px solid var(--surface);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    cursor: grab;
+    transition: transform 120ms ease;
+  }
+  .tb-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+  .tb-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.05); }
+  .tb-slider::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--fg);
+    border: 2px solid var(--surface);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    cursor: grab;
+  }
+  .tb-slider::-moz-range-track {
+    height: 4px; background: var(--subtle); border-radius: 999px;
+  }
+  .tb-value {
+    font: 500 12px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--muted);
+    min-width: 36px;
+    text-align: right;
+    user-select: none;
+  }
+
+  .status {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--muted);
+    padding: 0 8px;
+    user-select: none;
+  }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--muted);
+    transition: background 200ms ease, box-shadow 200ms ease;
+  }
+  .dot.live { background: #22c55e; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); animation: pulse 2.2s infinite; }
+  .dot.warn { background: #f59e0b; }
+  .dot.error { background: #ef4444; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45); }
+    70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+  }
+
+  /* --- Cursor idle hint --- */
+  body.idle { cursor: none; }
+  body.idle .toolbar { opacity: 0; transform: translateX(-50%) translateY(-8px); pointer-events: none; }
+
+  /* --- Banner --- */
+  .banner {
+    position: fixed;
+    top: 72px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 40;
+    max-width: min(620px, calc(100% - 32px));
+    padding: 12px 16px;
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    font-size: 13.5px; line-height: 1.5;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .banner.hidden { display: none; }
+  .banner svg { flex: 0 0 auto; width: 16px; height: 16px; margin-top: 2px; color: var(--muted); }
+  .banner button.close {
+    margin-left: auto;
+    background: transparent; border: none; color: var(--muted);
+    cursor: pointer; font-size: 18px; line-height: 1; padding: 0 4px;
+  }
+
+  /* --- Main reading area --- */
+  main {
+    margin: 0 auto;
+    padding: 96px 24px 96px;
+    max-width: var(--reading-width, 720px);
+    transition: max-width 80ms linear;
+  }
+
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 72px 20px;
+  }
+  .empty .ico {
+    width: 56px; height: 56px;
+    margin: 0 auto 20px;
+    border-radius: 16px;
+    background: var(--subtle);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+  }
+  .empty .ico svg { width: 26px; height: 26px; }
+  .empty h2 {
+    color: var(--fg);
+    font-weight: 600;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+  }
+  .empty p { margin: 0; font-size: 14px; max-width: 360px; margin: 0 auto; }
+  .empty kbd {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 1px 6px;
+    font: 600 12px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--fg);
+  }
+
+  /* --- Rendered markdown --- */
+  #output {
+    font-size: 16.5px;
+    color: var(--fg);
+    letter-spacing: -0.003em;
+  }
+  #output.justified p,
+  #output.justified li,
+  #output.justified blockquote {
+    text-align: justify;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    text-justify: inter-word;
+  }
+  #output > :first-child { margin-top: 0; }
+  #output > :last-child { margin-bottom: 0; }
+  #output h1, #output h2, #output h3, #output h4 {
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    margin: 1.8em 0 0.6em;
+    font-weight: 700;
+  }
+  #output h1 {
+    font-size: 2em;
+    margin-top: 0;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--border);
+  }
+  #output h2 {
+    font-size: 1.5em;
+    padding-bottom: 0.25em;
+    border-bottom: 1px solid var(--border);
+  }
+  #output h3 { font-size: 1.2em; }
+  #output h4 { font-size: 1.05em; }
+  #output p { margin: 0 0 1em; }
+  #output a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    transition: border-color 150ms ease;
+  }
+  #output a:hover { border-bottom-color: var(--accent); }
+  #output code {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    padding: 0.1em 0.4em;
+    border-radius: 5px;
+    font: 0.88em/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  #output pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    padding: 16px 18px;
+    border-radius: 10px;
+    overflow-x: auto;
+    margin: 1.2em 0;
+  }
+  #output pre code {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font-size: 0.88em;
+  }
+  #output blockquote {
+    margin: 1em 0;
+    padding: 0.2em 1em;
+    border-left: 3px solid var(--border);
+    color: var(--muted);
+  }
+  #output blockquote p:last-child { margin-bottom: 0; }
+  #output table {
+    border-collapse: collapse;
+    margin: 1em 0;
+    font-size: 0.95em;
+    display: block;
+    overflow-x: auto;
+  }
+  #output th, #output td {
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    text-align: left;
+  }
+  #output th { background: var(--subtle); font-weight: 600; }
+  #output tr:nth-child(2n) td { background: color-mix(in srgb, var(--subtle) 50%, transparent); }
+  #output img {
+    max-width: 100%; height: auto;
+    border-radius: 6px;
+  }
+  #output hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 2em 0;
+  }
+  #output ul, #output ol { padding-left: 1.6em; margin: 0 0 1em; }
+  #output li { margin: 0.25em 0; }
+  #output li > p { margin: 0.25em 0; }
+  #output li input[type=checkbox] {
+    margin-right: 0.5em;
+    transform: translateY(1px);
+  }
+
+  /* --- Syntax highlighting (inline, no extra css) --- */
+  .hljs-keyword, .hljs-selector-tag { color: var(--hl-keyword); }
+  .hljs-string, .hljs-attr { color: var(--hl-string); }
+  .hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+  .hljs-number, .hljs-literal { color: var(--hl-number); }
+  .hljs-title, .hljs-function .hljs-title, .hljs-section { color: var(--hl-fn); }
+  .hljs-tag, .hljs-name { color: var(--hl-tag); }
+  .hljs-built_in, .hljs-type { color: var(--hl-fn); }
+
+  /* --- Responsive --- */
+  @media (max-width: 640px) {
+    .tb-label { display: none; }
+    .tb-btn { padding: 7px 10px; }
+    main { padding: 88px 18px 64px; }
+    #output h1 { font-size: 1.7em; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div class="toolbar" id="toolbar" role="toolbar" aria-label="Viewer controls">
+  <div class="tb-group">
+    <span class="status" title="Clipboard status">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">Idle</span>
+    </span>
+  </div>
+
+  <div class="tb-group">
+    <button class="tb-btn primary" id="grantBtn" title="Grant clipboard read permission">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/></svg>
+      Live
+    </button>
+    <button class="tb-btn" id="pasteBtn" title="Paste from clipboard (Ctrl+V)">Paste</button>
+  </div>
+
+  <div class="tb-group" aria-label="Reading width">
+    <span class="tb-label">Width</span>
+    <input type="range" id="widthSlider" class="tb-slider" min="440" max="1400" step="20" aria-label="Reading width" />
+    <span class="tb-value" id="widthValue">720</span>
+  </div>
+
+  <div class="tb-group">
+    <button class="tb-btn" id="justifyBtn" title="Justify text" aria-label="Justify text" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      Justify
+    </button>
+  </div>
+
+  <div class="tb-group" role="radiogroup" aria-label="Theme">
+    <span class="tb-label">Theme</span>
+    <button class="tb-btn" data-theme="light" role="radio" title="Light" aria-label="Light theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    </button>
+    <button class="tb-btn" data-theme="dark" role="radio" title="Dark" aria-label="Dark theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <button class="tb-btn" data-theme="auto" role="radio" title="Match system">Auto</button>
+  </div>
+</div>
+
+<div id="banner" class="banner hidden" role="status">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+  <span id="bannerText"></span>
+  <button class="close" id="bannerClose" aria-label="Dismiss">&times;</button>
+</div>
+
+<main>
+  <div id="empty" class="empty">
+    <div class="ico">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/></svg>
+    </div>
+    <h2 id="emptyTitle">Copy some Markdown, then paste</h2>
+    <p id="emptyHint">Press <kbd>Ctrl</kbd>+<kbd>V</kbd> anywhere on this page, or click <strong>Live</strong> in the toolbar to start watching your clipboard.</p>
+  </div>
+  <article id="output"></article>
+</main>
+
+<script>
+(() => {
+  // ---------- Elements ----------
+  const html = document.documentElement;
+  const body = document.body;
+  const toolbar = document.getElementById('toolbar');
+  const dot = document.getElementById('dot');
+  const statusText = document.getElementById('statusText');
+  const grantBtn = document.getElementById('grantBtn');
+  const pasteBtn = document.getElementById('pasteBtn');
+  const output = document.getElementById('output');
+  const empty = document.getElementById('empty');
+  const emptyTitle = document.getElementById('emptyTitle');
+  const emptyHint = document.getElementById('emptyHint');
+  const banner = document.getElementById('banner');
+  const bannerText = document.getElementById('bannerText');
+  const bannerClose = document.getElementById('bannerClose');
+
+  // ---------- Setting ----------
+  const PREFS_KEY = 'cmv:prefs';
+  const prefs = Object.assign(
+    { theme: 'auto', width: 720, justify: false },
+    JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')
+  );
+  // Migrate any previous string/preset values.
+  if (typeof prefs.width !== 'number') {
+    prefs.width = prefs.width === 'full' ? 1400 : (parseInt(prefs.width, 10) || 720);
+  }
+  const savePrefs = () => localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+
+  // ---------- Theme ----------
+  const mql = window.matchMedia('(prefers-color-scheme: dark)');
+  function applyTheme() {
+    const resolved = prefs.theme === 'auto' ? (mql.matches ? 'dark' : 'light') : prefs.theme;
+    html.setAttribute('data-theme', resolved);
+    toolbar.querySelectorAll('[data-theme]').forEach(b => {
+      b.setAttribute('aria-pressed', b.dataset.theme === prefs.theme ? 'true' : 'false');
+    });
+  }
+  toolbar.querySelectorAll('[data-theme]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      prefs.theme = btn.dataset.theme;
+      savePrefs(); applyTheme();
+    });
+  });
+  mql.addEventListener('change', () => { if (prefs.theme === 'auto') applyTheme(); });
+
+  // ---------- Reading width ----------
+  const widthSlider = document.getElementById('widthSlider');
+  const widthValue = document.getElementById('widthValue');
+  function applyWidth() {
+    document.documentElement.style.setProperty('--reading-width', prefs.width + 'px');
+    widthSlider.value = prefs.width;
+    widthValue.textContent = prefs.width;
+  }
+  widthSlider.addEventListener('input', () => {
+    prefs.width = parseInt(widthSlider.value, 10);
+    widthValue.textContent = prefs.width;
+    document.documentElement.style.setProperty('--reading-width', prefs.width + 'px');
+  });
+  widthSlider.addEventListener('change', savePrefs);
+
+  // ---------- Justify ----------
+  const justifyBtn = document.getElementById('justifyBtn');
+  function applyJustify() {
+    output.classList.toggle('justified', !!prefs.justify);
+    justifyBtn.setAttribute('aria-pressed', prefs.justify ? 'true' : 'false');
+  }
+  justifyBtn.addEventListener('click', () => {
+    prefs.justify = !prefs.justify;
+    savePrefs(); applyJustify();
+  });
+  applyJustify();
+
+  applyTheme();
+  applyWidth();
+
+  // ---------- Toolbar auto-hide ----------
+  const IDLE_MS = 5000;
+  let idleTimer;
+  function bump() {
+    body.classList.remove('idle');
+    toolbar.classList.remove('hidden');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      body.classList.add('idle');
+      toolbar.classList.add('hidden');
+    }, IDLE_MS);
+  }
+  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel'].forEach(evt => {
+    window.addEventListener(evt, bump, { passive: true });
+  });
+  toolbar.addEventListener('mouseenter', () => {
+    clearTimeout(idleTimer);
+    body.classList.remove('idle');
+    toolbar.classList.remove('hidden');
+  });
+
+  // Hide immediately when the cursor leaves the window.
+  function hideNow() {
+    clearTimeout(idleTimer);
+    body.classList.add('idle');
+    toolbar.classList.add('hidden');
+  }
+  document.addEventListener('mouseleave', hideNow);
+  // Fallback - mouseout with no related target = left the window.
+  document.addEventListener('mouseout', (e) => {
+    if (!e.relatedTarget && !e.toElement) hideNow();
+  });
+  window.addEventListener('blur', hideNow);
+  bump();
+
+  // ---------- Markdown ----------
+  marked.setOptions({
+    gfm: true,
+    breaks: false,
+    highlight(code, lang) {
+      try {
+        if (lang && hljs.getLanguage(lang)) return hljs.highlight(code, { language: lang }).value;
+        return hljs.highlightAuto(code).value;
+      } catch { return code; }
+    },
+  });
+
+  let lastText = '';
+  const DEFAULT_TITLE = "Syntax's Clipboard Markdown Viewer.";
+
+  function deriveTitle(text) {
+    const lines = text.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+      if (!line) continue;
+      line = line
+        .replace(/^#{1,6}\s+/, '')                       // ATX heading hashes
+        .replace(/\s+#+\s*$/, '')                        // trailing ATX hashes
+        .replace(/^\s*(?:[>*+\-]\s+|\d+[.)]\s+)/, '')    // blockquote / list markers
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')        // images
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')         // links
+        .replace(/`([^`]+)`/g, '$1')                     // inline code
+        .replace(/(\*\*|__)(.+?)\1/g, '$2')              // bold
+        .replace(/(\*|_)(.+?)\1/g, '$2')                 // italic
+        .replace(/~~(.+?)~~/g, '$1');                    // strikethrough
+      // Skip pure horizontal-rule lines after marker stripping
+      if (/^(?:-{3,}|={3,}|\*{3,})$/.test(line)) continue;
+      line = line.trim();
+      if (line) return line.length > 80 ? line.slice(0, 77) + '…' : line;
+    }
+    return null;
+  }
+
+  function render(text) {
+    if (!text || !text.trim()) {
+      output.innerHTML = '';
+      empty.style.display = '';
+      document.title = DEFAULT_TITLE;
+      return;
+    }
+    empty.style.display = 'none';
+    output.innerHTML = DOMPurify.sanitize(marked.parse(text));
+    const title = deriveTitle(text);
+    document.title = title ? title : DEFAULT_TITLE;
+  }
+
+  // ---------- Status ----------
+  function setStatus(text, kind) {
+    statusText.textContent = text;
+    dot.className = 'dot' + (kind ? ' ' + kind : '');
+  }
+  function showBanner(msg) {
+    bannerText.textContent = msg;
+    banner.classList.remove('hidden');
+  }
+  function hideBanner() { banner.classList.add('hidden'); }
+  bannerClose.addEventListener('click', hideBanner);
+
+  // ---------- Clipboard ----------
+  const isFile = location.protocol === 'file:';
+  const hasClipboardRead = !!(navigator.clipboard && navigator.clipboard.readText);
+
+  // On file:// origins the browser cannot persistently remember clipboard
+  // permission, so every readText() re-prompts. Disable polling there and
+  // rely on the manual paste flow, which does not trigger a prompt.
+  const canPoll = !isFile && hasClipboardRead;
+
+  let polling = false;
+  let intervalId = null;
+
+  async function readClipboard() {
+    if (!hasClipboardRead) throw new Error('Clipboard API unavailable');
+    return navigator.clipboard.readText();
+  }
+
+  async function tick() {
+    try {
+      const text = await readClipboard();
+      hideBanner();
+      if (text !== lastText) { lastText = text; render(text); }
+      setStatus('Live - watching clipboard', 'live');
+    } catch (err) {
+      stopPolling();
+      setStatus('Permission needed', 'error');
+      showBanner('Could not read clipboard automatically. Use Paste or press Ctrl+V instead.');
+    }
+  }
+
+  async function startPolling() {
+    if (!canPoll) {
+      showBanner(
+        isFile
+          ? 'Live clipboard watching is disabled on file:// pages because the browser cannot remember the permission. Press Ctrl+V (or use Paste) - your notes will still render instantly.'
+          : 'Your browser does not support clipboard reading. Use Paste or Ctrl+V instead.'
+      );
+      setStatus('Manual paste only', 'warn');
+      return;
+    }
+    if (polling) return;
+    polling = true;
+    await tick();
+    if (polling) intervalId = setInterval(tick, 800);
+  }
+  function stopPolling() {
+    polling = false;
+    if (intervalId) { clearInterval(intervalId); intervalId = null; }
+  }
+
+  grantBtn.addEventListener('click', async () => {
+    if (!canPoll) { startPolling(); return; }
+    try {
+      await readClipboard();
+      hideBanner();
+      startPolling();
+    } catch {
+      setStatus('Permission denied', 'error');
+      showBanner('Clipboard read was denied. You can still press Ctrl+V or click Paste to view notes manually.');
+    }
+  });
+
+  pasteBtn.addEventListener('click', async () => {
+    if (!canPoll) {
+      showBanner('Press Ctrl+V (or Cmd+V) anywhere on this page to paste - the browser blocks programmatic clipboard reads here.');
+      return;
+    }
+    try {
+      const text = await readClipboard();
+      lastText = text; render(text); hideBanner();
+      setStatus('Pasted', 'live');
+    } catch {
+      showBanner('Press Ctrl+V (or Cmd+V) to paste manually.');
+    }
+  });
+
+  // Manual paste anywhere - works on file:// without any permission prompt.
+  window.addEventListener('paste', (e) => {
+    const text = e.clipboardData && e.clipboardData.getData('text/plain');
+    if (text != null) {
+      lastText = text; render(text); hideBanner();
+      setStatus(canPoll && polling ? 'Live - watching clipboard' : 'Pasted', canPoll && polling ? 'live' : 'warn');
+    }
+  });
+
+  // Re-check on focus / visibility so changes made while away are picked up.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && polling) tick();
+  });
+  window.addEventListener('focus', () => { if (polling) tick(); });
+
+  // ---------- Initial UX ----------
+  if (isFile) {
+    setStatus('Manual mode (file://)', 'warn');
+    emptyTitle.textContent = 'Paste Markdown to view it';
+    emptyHint.innerHTML = 'Running from a local file, so live watching is off. Press <kbd>Ctrl</kbd>+<kbd>V</kbd> to paste - re-paste anytime to refresh.';
+    grantBtn.style.display = 'none';
+  } else if (!hasClipboardRead) {
+    setStatus('Clipboard API unavailable', 'warn');
+    grantBtn.style.display = 'none';
+  } else {
+    setStatus('Idle - click Live to watch');
+  }
+})();
+</script>
+</body>
+</html>
