@@ -7,6 +7,8 @@
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/common.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <style>
   :root {
     --bg: #fbfbfa;
@@ -359,6 +361,22 @@
     transform: translateY(1px);
   }
 
+  /* --- Math --- */
+  #output .katex-display {
+    margin: 1em 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  #output .katex { font-size: 1.05em; }
+  #output .math-error {
+    color: #b91c1c;
+    background: color-mix(in srgb, #b91c1c 12%, transparent);
+    border: 1px solid color-mix(in srgb, #b91c1c 30%, transparent);
+    padding: 0.1em 0.4em;
+    border-radius: 5px;
+    font: 0.88em/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
   /* --- Syntax highlighting (inline, no extra css) --- */
   .hljs-keyword, .hljs-selector-tag { color: var(--hl-keyword); }
   .hljs-string, .hljs-attr { color: var(--hl-string); }
@@ -560,6 +578,66 @@
         return hljs.highlightAuto(code).value;
       } catch { return code; }
     },
+  });
+
+  // ---------- Math (KaTeX) ----------
+  function renderMath(expr, display) {
+    if (typeof katex === 'undefined') {
+      return '<span class="math-error">' + (display ? '$$' : '$') + expr + (display ? '$$' : '$') + '</span>';
+    }
+    try {
+      return katex.renderToString(expr, {
+        displayMode: display,
+        throwOnError: false,
+        output: 'htmlAndMathml',
+        strict: 'ignore',
+      });
+    } catch (e) {
+      return '<span class="math-error">' + (e && e.message ? e.message : expr) + '</span>';
+    }
+  }
+
+  marked.use({
+    extensions: [
+      {
+        // $$ ... $$ as a block (supports multi-line). Marked tries this at block level.
+        name: 'mathBlock',
+        level: 'block',
+        start(src) { const i = src.indexOf('$$'); return i < 0 ? undefined : i; },
+        tokenizer(src) {
+          const m = /^\$\$([\s\S]+?)\$\$(?:\n|$)/.exec(src) || /^\$\$([\s\S]+?)\$\$/.exec(src);
+          if (m) return { type: 'mathBlock', raw: m[0], expr: m[1].trim() };
+        },
+        renderer(token) { return renderMath(token.expr, true); },
+      },
+      {
+        // $$ ... $$ inline (single-line, inside a paragraph)
+        name: 'mathInlineDisplay',
+        level: 'inline',
+        start(src) { const i = src.indexOf('$$'); return i < 0 ? undefined : i; },
+        tokenizer(src) {
+          const m = /^\$\$([^\n]+?)\$\$/.exec(src);
+          if (m) return { type: 'mathInlineDisplay', raw: m[0], expr: m[1].trim() };
+        },
+        renderer(token) { return renderMath(token.expr, true); },
+      },
+      {
+        // $ ... $ inline math
+        name: 'mathInline',
+        level: 'inline',
+        start(src) {
+          // Find the next $ that isn't escaped and isn't $$
+          const m = /(?<!\\)\$(?!\$)/.exec(src);
+          return m ? m.index : undefined;
+        },
+        tokenizer(src) {
+          // Require non-space at both ends, no inner $ or newline
+          const m = /^\$(?!\$)(\S(?:[^\$\n]*?\S)?)\$(?!\$)/.exec(src);
+          if (m) return { type: 'mathInline', raw: m[0], expr: m[1] };
+        },
+        renderer(token) { return renderMath(token.expr, false); },
+      },
+    ],
   });
 
   let lastText = '';
