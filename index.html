@@ -193,6 +193,392 @@
   /* --- Cursor idle hint --- */
   body.idle { cursor: none; }
   body.idle .toolbar { opacity: 0; transform: translateX(-50%) translateY(-8px); pointer-events: none; }
+  body.idle .sidebar-toggle { opacity: 0; transform: translateY(-8px); pointer-events: none; }
+
+  /* --- Sidebar toggle (top-left) --- */
+  .sidebar-toggle {
+    position: fixed;
+    top: 12px;
+    left: 16px;
+    z-index: 60;
+    appearance: none;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    width: 40px; height: 40px;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    opacity: 1;
+    transition: opacity 400ms ease, transform 400ms ease, background 150ms ease;
+  }
+  .sidebar-toggle:hover { background: var(--subtle); }
+  .sidebar-toggle.hidden {
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
+  }
+  .sidebar-toggle svg { width: 18px; height: 18px; }
+
+  /* --- Sidebar --- */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 100vh;
+    width: var(--sidebar-width, 380px);
+    z-index: 55;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar.resizing { transition: none; user-select: none; }
+
+  .sidebar-resize {
+    position: absolute;
+    top: 0; right: -4px;
+    width: 8px;
+    height: 100%;
+    cursor: ew-resize;
+    z-index: 2;
+    background: transparent;
+    transition: background 150ms ease;
+  }
+  .sidebar-resize::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    background: transparent;
+    transition: background 150ms ease;
+  }
+  .sidebar-resize:hover::after,
+  .sidebar.resizing .sidebar-resize::after {
+    background: color-mix(in srgb, var(--accent) 60%, transparent);
+  }
+  .sidebar-header {
+    padding: 14px 16px 12px;
+    padding-left: 68px; /* leave room for the toggle button */
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 64px;
+  }
+  .sidebar-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+    flex: 1;
+  }
+  .sidebar-save {
+    appearance: none;
+    background: var(--accent);
+    color: var(--accent-fg);
+    border: none;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font: 500 12px/1 inherit;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px;
+    transition: filter 150ms ease;
+  }
+  .sidebar-save:hover { filter: brightness(1.08); }
+  .sidebar-save:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: none;
+  }
+  .sidebar-save svg { width: 12px; height: 12px; }
+
+  .notes-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .notes-empty {
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 32px 16px;
+  }
+
+  .note-card {
+    position: relative;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease;
+    overflow: hidden;
+  }
+  .note-card:hover {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+    background: color-mix(in srgb, var(--subtle) 60%, var(--bg));
+  }
+  .note-card.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  }
+  .note-meta {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 8px;
+    min-width: 0;
+  }
+  .note-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .note-time {
+    font-size: 11px;
+    color: var(--muted);
+    user-select: none;
+    flex: 0 0 auto;
+    order: 2;
+  }
+  .note-delete {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 2px 4px;
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-left: auto;
+    order: 1;
+    opacity: 0;
+    transition: opacity 150ms ease, color 150ms ease, background 150ms ease;
+  }
+  .note-card:hover .note-delete { opacity: 1; }
+  .note-delete:hover { color: #ef4444; background: var(--subtle); }
+  .note-delete svg { width: 13px; height: 13px; }
+
+  /* --- Note preview ---
+     Mirrors #output styling at a smaller base font size so the card looks
+     like a real reading window. Long lines are clipped (white-space: nowrap)
+     rather than wrapped, and the whole thing is height-clamped to ~5 lines.
+     The mask fades content out toward the right and bottom edges. */
+  .note-preview {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--fg);
+    letter-spacing: -0.003em;
+    max-height: calc(7.75em * var(--note-height-scale, 1) + 4px);
+    overflow: hidden;
+    pointer-events: none; /* clicks pass through to the card */
+    -webkit-mask-image:
+      linear-gradient(to bottom, #000 0, #000 calc(100% - 32px), transparent 100%),
+      linear-gradient(to right,  #000 0, #000 calc(100% - 36px), transparent 100%);
+    mask-image:
+      linear-gradient(to bottom, #000 0, #000 calc(100% - 32px), transparent 100%),
+      linear-gradient(to right,  #000 0, #000 calc(100% - 36px), transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+  .note-preview > :first-child { margin-top: 0; }
+  .note-preview > :last-child { margin-bottom: 0; }
+
+  .note-preview h1, .note-preview h2,
+  .note-preview h3, .note-preview h4 {
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    margin: 0.6em 0 0.25em;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .note-preview h1 {
+    font-size: 1.7em;
+    margin-top: 0;
+    padding-bottom: 0.18em;
+    border-bottom: 1px solid var(--border);
+  }
+  .note-preview h2 {
+    font-size: 1.35em;
+    padding-bottom: 0.15em;
+    border-bottom: 1px solid var(--border);
+  }
+  .note-preview h3 { font-size: 1.15em; }
+  .note-preview h4 { font-size: 1.05em; }
+
+  .note-preview p {
+    margin: 0 0 0.5em;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .note-preview a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .note-preview code {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    padding: 0.05em 0.3em;
+    border-radius: 4px;
+    font: 0.88em/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .note-preview pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin: 0.4em 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .note-preview pre code {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font-size: 0.88em;
+  }
+  .note-preview blockquote {
+    margin: 0.4em 0;
+    padding: 0.05em 0.6em;
+    border-left: 2px solid var(--border);
+    color: var(--muted);
+  }
+  .note-preview blockquote p {
+    margin: 0;
+  }
+  .note-preview ul, .note-preview ol {
+    padding-left: 1.4em;
+    margin: 0 0 0.5em;
+  }
+  .note-preview li {
+    margin: 0.1em 0;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .note-preview li > p {
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .note-preview hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 0.4em 0;
+  }
+  .note-preview table {
+    border-collapse: collapse;
+    font-size: 0.95em;
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .note-preview th, .note-preview td {
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    text-align: left;
+  }
+  .note-preview th { background: var(--subtle); font-weight: 600; }
+  .note-preview img { display: none; }
+  .note-preview .katex-display {
+    margin: 0.3em 0;
+    overflow: hidden;
+  }
+  .note-preview .katex { font-size: 1em; }
+
+  /* --- Modal (confirm dialog) --- */
+  .modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .modal.hidden { display: none; }
+  .modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    backdrop-filter: saturate(120%) blur(4px);
+    -webkit-backdrop-filter: saturate(120%) blur(4px);
+    animation: modal-fade 160ms ease;
+  }
+  .modal-card {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    padding: 18px 20px 16px;
+    max-width: 380px;
+    width: 100%;
+    animation: modal-pop 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @keyframes modal-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes modal-pop {
+    from { opacity: 0; transform: translateY(6px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .modal-title {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+  }
+  .modal-message {
+    margin: 0 0 16px;
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.5;
+    word-break: break-word;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+  .modal-actions .tb-btn {
+    background: var(--subtle);
+  }
+  .modal-actions .tb-btn:hover { background: color-mix(in srgb, var(--subtle) 60%, var(--border)); }
+  .modal-actions .tb-btn.danger {
+    background: #ef4444;
+    color: #ffffff;
+  }
+  .modal-actions .tb-btn.danger:hover {
+    background: #ef4444;
+    filter: brightness(1.08);
+  }
+  .modal-actions .tb-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 
   /* --- Banner --- */
   .banner {
@@ -397,6 +783,24 @@
 </head>
 <body>
 
+<!-- Sidebar toggle (top-left) -->
+<button class="sidebar-toggle" id="sidebarToggle" title="Toggle saved notes" aria-label="Toggle saved notes" aria-expanded="false">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar" aria-label="Saved notes">
+  <div class="sidebar-header">
+    <h3 class="sidebar-title">Saved notes</h3>
+    <button class="sidebar-save" id="sidebarSaveBtn" title="Save the current note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Save
+    </button>
+  </div>
+  <div class="notes-list" id="notesList"></div>
+  <div class="sidebar-resize" id="sidebarResize" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"></div>
+</aside>
+
 <!-- Toolbar -->
 <div class="toolbar" id="toolbar" role="toolbar" aria-label="Viewer controls">
   <div class="tb-group">
@@ -404,6 +808,13 @@
       <span class="dot" id="dot"></span>
       <span id="statusText">Idle</span>
     </span>
+  </div>
+
+  <div class="tb-group">
+    <button class="tb-btn" id="saveBtn" title="Save current note to sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Save
+    </button>
   </div>
 
   <div class="tb-group">
@@ -436,6 +847,19 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     </button>
     <button class="tb-btn" data-theme="auto" role="radio" title="Match system">Auto</button>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-backdrop" id="modalBackdrop"></div>
+  <div class="modal-card">
+    <h3 class="modal-title" id="modalTitle">Confirm</h3>
+    <p class="modal-message" id="modalMessage"></p>
+    <div class="modal-actions">
+      <button class="tb-btn" id="modalCancel" type="button">Cancel</button>
+      <button class="tb-btn" id="modalConfirm" type="button">Confirm</button>
+    </div>
   </div>
 </div>
 
@@ -473,6 +897,12 @@
   const banner = document.getElementById('banner');
   const bannerText = document.getElementById('bannerText');
   const bannerClose = document.getElementById('bannerClose');
+  const sidebar = document.getElementById('sidebar');
+  const sidebarToggle = document.getElementById('sidebarToggle');
+  const sidebarSaveBtn = document.getElementById('sidebarSaveBtn');
+  const sidebarResize = document.getElementById('sidebarResize');
+  const saveBtn = document.getElementById('saveBtn');
+  const notesList = document.getElementById('notesList');
 
   // ---------- Setting ----------
   const PREFS_KEY = 'cmv:prefs';
@@ -536,13 +966,22 @@
   // ---------- Toolbar auto-hide ----------
   const IDLE_MS = 5000;
   let idleTimer;
-  function bump() {
+  // While the sidebar is open the user is actively working with notes, so
+  // the toolbar and sidebar toggle should stay visible until they close it.
+  function sidebarOpen() { return sidebar.classList.contains('open'); }
+  function showChrome() {
     body.classList.remove('idle');
     toolbar.classList.remove('hidden');
+    sidebarToggle.classList.remove('hidden');
+  }
+  function bump() {
+    showChrome();
     clearTimeout(idleTimer);
+    if (sidebarOpen()) return;
     idleTimer = setTimeout(() => {
       body.classList.add('idle');
       toolbar.classList.add('hidden');
+      sidebarToggle.classList.add('hidden');
     }, IDLE_MS);
   }
   ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel'].forEach(evt => {
@@ -550,15 +989,21 @@
   });
   toolbar.addEventListener('mouseenter', () => {
     clearTimeout(idleTimer);
-    body.classList.remove('idle');
-    toolbar.classList.remove('hidden');
+    showChrome();
+  });
+  sidebar.addEventListener('mouseenter', () => {
+    clearTimeout(idleTimer);
+    showChrome();
   });
 
-  // Hide immediately when the cursor leaves the window.
+  // Hide immediately when the cursor leaves the window — but only if the
+  // sidebar is closed; an open sidebar pins the chrome.
   function hideNow() {
+    if (sidebarOpen()) return;
     clearTimeout(idleTimer);
     body.classList.add('idle');
     toolbar.classList.add('hidden');
+    sidebarToggle.classList.add('hidden');
   }
   document.addEventListener('mouseleave', hideNow);
   // Fallback - mouseout with no related target = left the window.
@@ -671,13 +1116,288 @@
       output.innerHTML = '';
       empty.style.display = '';
       document.title = DEFAULT_TITLE;
+      refreshSaveButtons();
       return;
     }
     empty.style.display = 'none';
     output.innerHTML = DOMPurify.sanitize(marked.parse(text));
     const title = deriveTitle(text);
     document.title = title ? title : DEFAULT_TITLE;
+    refreshSaveButtons();
+    if (activeNoteId) {
+      const active = notes.find(n => n.id === activeNoteId);
+      if (!active || active.content !== text) {
+        activeNoteId = null;
+        renderNotesList();
+      }
+    }
   }
+
+  // ---------- Confirm modal ----------
+  const modal = document.getElementById('modal');
+  const modalBackdrop = document.getElementById('modalBackdrop');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalMessage = document.getElementById('modalMessage');
+  const modalCancel = document.getElementById('modalCancel');
+  const modalConfirm = document.getElementById('modalConfirm');
+
+  let modalResolver = null;
+  let modalKeyHandler = null;
+
+  function closeModal(result) {
+    modal.classList.add('hidden');
+    if (modalKeyHandler) {
+      document.removeEventListener('keydown', modalKeyHandler);
+      modalKeyHandler = null;
+    }
+    const r = modalResolver;
+    modalResolver = null;
+    if (r) r(result);
+  }
+
+  function confirmDialog({ title, message, confirmLabel = 'Confirm', danger = false }) {
+    // If a previous dialog is still open, dismiss it first.
+    if (modalResolver) closeModal(false);
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    modalConfirm.textContent = confirmLabel;
+    modalConfirm.classList.toggle('danger', !!danger);
+    modal.classList.remove('hidden');
+    // Focus Cancel by default — safer for destructive prompts.
+    setTimeout(() => modalCancel.focus(), 0);
+    return new Promise((resolve) => {
+      modalResolver = resolve;
+      modalKeyHandler = (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); closeModal(false); }
+        else if (e.key === 'Enter') { e.preventDefault(); closeModal(true); }
+      };
+      document.addEventListener('keydown', modalKeyHandler);
+    });
+  }
+
+  modalCancel.addEventListener('click', () => closeModal(false));
+  modalConfirm.addEventListener('click', () => closeModal(true));
+  modalBackdrop.addEventListener('click', () => closeModal(false));
+
+  // ---------- Saved notes ----------
+  const NOTES_KEY = 'cmv:notes';
+  const SIDEBAR_KEY = 'cmv:sidebar';
+  let notes = [];
+  try {
+    const raw = localStorage.getItem(NOTES_KEY);
+    if (raw) notes = JSON.parse(raw) || [];
+  } catch { notes = []; }
+  let activeNoteId = null;
+  const saveNotes = () => localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+
+  function setSidebarOpen(open) {
+    sidebar.classList.toggle('open', open);
+    sidebarToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    localStorage.setItem(SIDEBAR_KEY, open ? '1' : '0');
+    if (open) {
+      // Pin the chrome — auto-hide is disabled while the sidebar is open.
+      clearTimeout(idleTimer);
+      showChrome();
+    } else {
+      // Sidebar just closed — restart the idle countdown so things hide again.
+      bump();
+    }
+  }
+
+  sidebarToggle.addEventListener('click', () => {
+    setSidebarOpen(!sidebar.classList.contains('open'));
+  });
+
+  // ---------- Sidebar resize ----------
+  const SIDEBAR_W_KEY = 'cmv:sidebarWidth';
+  const MIN_W = 280;
+  const MAX_W = 720;
+  // Cards fill the sidebar horizontally (linear with drag). The preview's
+  // max-height grows as a sublinear power of the width ratio so the box
+  // gets taller — visibly, but more slowly than it gets wider. Text size
+  // is fixed.
+  const BASE_W = 380;
+  function setSidebarWidth(w) {
+    w = Math.max(MIN_W, Math.min(MAX_W, Math.round(w)));
+    document.documentElement.style.setProperty('--sidebar-width', w + 'px');
+    const scale = Math.pow(w / BASE_W, 0.7);
+    document.documentElement.style.setProperty('--note-height-scale', scale.toFixed(3));
+    return w;
+  }
+  const savedW = parseInt(localStorage.getItem(SIDEBAR_W_KEY), 10);
+  setSidebarWidth(savedW || BASE_W);
+
+  let resizing = false;
+  sidebarResize.addEventListener('mousedown', (e) => {
+    resizing = true;
+    sidebar.classList.add('resizing');
+    document.body.style.cursor = 'ew-resize';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!resizing) return;
+    setSidebarWidth(e.clientX);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!resizing) return;
+    resizing = false;
+    sidebar.classList.remove('resizing');
+    document.body.style.cursor = '';
+    const cur = parseInt(getComputedStyle(sidebar).width, 10);
+    if (cur) localStorage.setItem(SIDEBAR_W_KEY, String(cur));
+  });
+
+  // If the first non-blank line is an ATX heading (# .. ######), return its
+  // text. The heading is then promoted into the card's meta row and skipped
+  // when rendering the preview so it does not appear twice.
+  function firstHeadingTitle(text) {
+    const lines = text.split(/\r?\n/);
+    for (const raw of lines) {
+      if (!raw.trim()) continue;
+      const m = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(raw);
+      return m ? m[1].trim() : null;
+    }
+    return null;
+  }
+
+  function notePreviewHtml(text, skipLeadingHeading) {
+    const lines = text.split(/\r?\n/);
+    let i = 0;
+    while (i < lines.length && !lines[i].trim()) i++;
+    if (skipLeadingHeading && i < lines.length && /^\s{0,3}#{1,6}\s+/.test(lines[i])) {
+      i++;
+      while (i < lines.length && !lines[i].trim()) i++;
+    }
+    // Pre-parse generously — the visible height is constrained by CSS
+    // (max-height + fade mask), so feed enough lines that a widened sidebar
+    // has content to fill.
+    const head = [];
+    for (; i < lines.length && head.length < 12; i++) head.push(lines[i]);
+    const src = head.join('\n');
+    try {
+      return DOMPurify.sanitize(marked.parse(src));
+    } catch {
+      return DOMPurify.sanitize(src);
+    }
+  }
+
+  function noteTitle(text) {
+    return deriveTitle(text) || 'Untitled note';
+  }
+
+  function formatTime(ts) {
+    const d = new Date(ts);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    if (sameDay) {
+      return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    }
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  function renderNotesList() {
+    notesList.innerHTML = '';
+    if (notes.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'notes-empty';
+      empty.textContent = 'No saved notes yet. Click Save to keep one.';
+      notesList.appendChild(empty);
+      return;
+    }
+    for (const note of notes) {
+      const card = document.createElement('div');
+      card.className = 'note-card' + (note.id === activeNoteId ? ' active' : '');
+      card.title = noteTitle(note.content);
+      card.dataset.id = note.id;
+
+      const headingTitle = firstHeadingTitle(note.content);
+
+      const meta = document.createElement('div');
+      meta.className = 'note-meta';
+      if (headingTitle) {
+        const titleEl = document.createElement('span');
+        titleEl.className = 'note-title';
+        titleEl.textContent = headingTitle;
+        meta.appendChild(titleEl);
+      }
+      const time = document.createElement('span');
+      time.className = 'note-time';
+      time.textContent = formatTime(note.savedAt);
+      const del = document.createElement('button');
+      del.className = 'note-delete';
+      del.title = 'Delete note';
+      del.setAttribute('aria-label', 'Delete note');
+      del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+      del.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const label = firstHeadingTitle(note.content) || deriveTitle(note.content) || 'this note';
+        const ok = await confirmDialog({
+          title: 'Delete note?',
+          message: '“' + label + '” will be permanently removed.',
+          confirmLabel: 'Delete',
+          danger: true,
+        });
+        if (!ok) return;
+        notes = notes.filter(n => n.id !== note.id);
+        if (activeNoteId === note.id) activeNoteId = null;
+        saveNotes();
+        renderNotesList();
+      });
+      meta.appendChild(time);
+      meta.appendChild(del);
+
+      const preview = document.createElement('div');
+      preview.className = 'note-preview';
+      preview.innerHTML = notePreviewHtml(note.content, !!headingTitle);
+
+      card.appendChild(meta);
+      card.appendChild(preview);
+      card.addEventListener('click', () => {
+        activeNoteId = note.id;
+        lastText = note.content;
+        render(note.content);
+        renderNotesList();
+      });
+      notesList.appendChild(card);
+    }
+  }
+
+  function saveCurrentNote() {
+    const text = lastText;
+    if (!text || !text.trim()) return;
+    // Avoid duplicating an identical adjacent save.
+    const existing = notes.find(n => n.content === text);
+    if (existing) {
+      existing.savedAt = Date.now();
+      activeNoteId = existing.id;
+      notes = [existing, ...notes.filter(n => n.id !== existing.id)];
+    } else {
+      const note = {
+        id: 'n_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        content: text,
+        savedAt: Date.now(),
+      };
+      notes.unshift(note);
+      activeNoteId = note.id;
+    }
+    saveNotes();
+    renderNotesList();
+    setSidebarOpen(true);
+  }
+
+  saveBtn.addEventListener('click', saveCurrentNote);
+  sidebarSaveBtn.addEventListener('click', saveCurrentNote);
+
+  function refreshSaveButtons() {
+    const has = !!(lastText && lastText.trim());
+    saveBtn.disabled = !has;
+    sidebarSaveBtn.disabled = !has;
+  }
+
+  // Restore last sidebar state.
+  if (localStorage.getItem(SIDEBAR_KEY) === '1') setSidebarOpen(true);
+  renderNotesList();
+  refreshSaveButtons();
 
   // ---------- Status ----------
   function setStatus(text, kind) {
