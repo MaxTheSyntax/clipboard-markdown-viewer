@@ -294,25 +294,27 @@
        cards' right edge stays put as content overflows / shrinks. */
     scrollbar-gutter: stable;
     scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
+    /* Match the sidebar's --surface so the thumb is invisible by default
+       without triggering UA-default scrollbar colors in Firefox. */
+    scrollbar-color: var(--surface) var(--surface);
     transition: scrollbar-color 200ms ease;
   }
   .sidebar:hover .notes-list,
   .notes-list:focus-within {
-    scrollbar-color: var(--border) transparent;
+    scrollbar-color: var(--border) var(--surface);
   }
   .sidebar:hover .notes-list:hover {
-    scrollbar-color: var(--muted) transparent;
+    scrollbar-color: var(--muted) var(--surface);
   }
   .notes-list::-webkit-scrollbar {
     width: 10px;
   }
   .notes-list::-webkit-scrollbar-track {
-    background: transparent;
+    background: var(--surface);
   }
   .notes-list::-webkit-scrollbar-thumb {
-    background: transparent;
-    border: 2px solid transparent;
+    background: var(--surface);
+    border: 2px solid var(--surface);
     background-clip: padding-box;
     border-radius: 999px;
     transition: background-color 200ms ease;
