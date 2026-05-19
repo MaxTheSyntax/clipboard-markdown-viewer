@@ -764,13 +764,20 @@
     .toolbar {
       top: 8px;
       padding: 4px;
-      /* Shift the centering rightward so the toolbar is centered in the
-         space that remains after the sidebar toggle (left: 8px, width 38px
-         → right edge at 46px). Half of that = 23px. */
-      left: calc(50% + 23px);
-      max-width: calc(100vw - 70px);
       gap: 2px;
+      /* Center within the area to the right of the sidebar toggle:
+         toggle right edge ≈ 46px, plus an 8px gap = left:54px. The
+         right:8px + margin:auto pair centers the toolbar in the
+         remaining space. Override the desktop translateX(-50%). */
+      left: 54px;
+      right: 8px;
+      margin: 0 auto;
+      width: max-content;
+      max-width: calc(100vw - 62px);
+      transform: none;
     }
+    .toolbar.hidden { transform: translateY(-8px); }
+    body.idle .toolbar { transform: translateY(-8px); }
     .tb-btn { padding: 7px 9px; font-size: 12.5px; }
     .tb-group { padding: 0 2px; }
     .tb-group + .tb-group { margin-left: 0; padding-left: 4px; }
