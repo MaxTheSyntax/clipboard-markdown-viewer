@@ -283,11 +283,50 @@
 
   .notes-list {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 10px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    /* Reserve the scrollbar gutter even when no scrollbar is visible so the
+       cards' right edge stays put as content overflows / shrinks. */
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    /* Match the sidebar's --surface so the thumb is invisible by default
+       without triggering UA-default scrollbar colors in Firefox. */
+    scrollbar-color: var(--surface) var(--surface);
+    transition: scrollbar-color 200ms ease;
+  }
+  .sidebar:hover .notes-list,
+  .notes-list:focus-within {
+    scrollbar-color: var(--border) var(--surface);
+  }
+  .sidebar:hover .notes-list:hover {
+    scrollbar-color: var(--muted) var(--surface);
+  }
+  .notes-list::-webkit-scrollbar {
+    width: 10px;
+  }
+  .notes-list::-webkit-scrollbar-track {
+    background: var(--surface);
+  }
+  .notes-list::-webkit-scrollbar-thumb {
+    background: var(--surface);
+    border: 2px solid var(--surface);
+    background-clip: padding-box;
+    border-radius: 999px;
+    transition: background-color 200ms ease;
+  }
+  .sidebar:hover .notes-list::-webkit-scrollbar-thumb,
+  .notes-list:focus-within::-webkit-scrollbar-thumb {
+    background: var(--border);
+    background-clip: padding-box;
+  }
+  .sidebar:hover .notes-list::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+    background-clip: padding-box;
   }
   .notes-empty {
     color: var(--muted);
@@ -305,6 +344,7 @@
     cursor: pointer;
     transition: border-color 150ms ease, background 150ms ease;
     overflow: hidden;
+    flex: 0 0 auto;
   }
   .note-card:hover {
     border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
@@ -337,9 +377,10 @@
     color: var(--muted);
     user-select: none;
     flex: 0 0 auto;
-    order: 2;
+    order: 3;
   }
-  .note-delete {
+  .note-delete,
+  .note-pin {
     appearance: none;
     background: transparent;
     border: none;
@@ -349,14 +390,47 @@
     cursor: pointer;
     display: inline-flex;
     flex: 0 0 auto;
-    margin-left: auto;
-    order: 1;
     opacity: 0;
     transition: opacity 150ms ease, color 150ms ease, background 150ms ease;
   }
-  .note-card:hover .note-delete { opacity: 1; }
+  .note-pin {
+    margin-left: auto;
+    order: 1;
+  }
+  .note-delete {
+    order: 2;
+  }
+  .note-card:hover .note-delete,
+  .note-card:hover .note-pin { opacity: 1; }
   .note-delete:hover { color: #ef4444; background: var(--subtle); }
-  .note-delete svg { width: 13px; height: 13px; }
+  .note-pin:hover { color: var(--accent); background: var(--subtle); }
+  .note-delete svg,
+  .note-pin svg { width: 13px; height: 13px; }
+  .note-card.pinned .note-pin {
+    opacity: 1;
+    color: var(--accent);
+  }
+  .note-card.pinned .note-pin svg { fill: currentColor; }
+
+  .notes-divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 4px 0;
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    user-select: none;
+    flex: 0 0 auto;
+  }
+  .notes-divider::before,
+  .notes-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
 
   /* --- Note preview ---
      Mirrors #output styling at a smaller base font size so the card looks
@@ -368,7 +442,7 @@
     line-height: 1.55;
     color: var(--fg);
     letter-spacing: -0.003em;
-    max-height: calc(7.75em * var(--note-height-scale, 1) + 4px);
+    height: calc(7.75em * var(--note-height-scale, 1) + 4px);
     overflow: hidden;
     pointer-events: none; /* clicks pass through to the card */
     -webkit-mask-image:
@@ -1224,8 +1298,27 @@
   setSidebarWidth(savedW || BASE_W);
 
   let resizing = false;
+  let resizeAnchor = null;
+
+  function captureResizeAnchor() {
+    const listTop = notesList.getBoundingClientRect().top;
+    for (const child of notesList.children) {
+      const r = child.getBoundingClientRect();
+      if (r.bottom > listTop + 1) {
+        return { el: child, offset: child.offsetTop - notesList.scrollTop };
+      }
+    }
+    return null;
+  }
+
+  function restoreResizeAnchor() {
+    if (!resizeAnchor || !resizeAnchor.el.isConnected) return;
+    notesList.scrollTop = resizeAnchor.el.offsetTop - resizeAnchor.offset;
+  }
+
   sidebarResize.addEventListener('mousedown', (e) => {
     resizing = true;
+    resizeAnchor = captureResizeAnchor();
     sidebar.classList.add('resizing');
     document.body.style.cursor = 'ew-resize';
     e.preventDefault();
@@ -1233,6 +1326,7 @@
   window.addEventListener('mousemove', (e) => {
     if (!resizing) return;
     setSidebarWidth(e.clientX);
+    restoreResizeAnchor();
   });
   window.addEventListener('mouseup', () => {
     if (!resizing) return;
@@ -1291,6 +1385,90 @@
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
 
+  function togglePin(note) {
+    if (note.pinned) {
+      note.pinned = false;
+      note.pinnedAt = 0;
+    } else {
+      note.pinned = true;
+      note.pinnedAt = Date.now();
+    }
+    saveNotes();
+    renderNotesList();
+  }
+
+  function buildNoteCard(note) {
+    const card = document.createElement('div');
+    card.className = 'note-card'
+      + (note.id === activeNoteId ? ' active' : '')
+      + (note.pinned ? ' pinned' : '');
+    card.title = noteTitle(note.content);
+    card.dataset.id = note.id;
+
+    const headingTitle = firstHeadingTitle(note.content);
+
+    const meta = document.createElement('div');
+    meta.className = 'note-meta';
+    if (headingTitle) {
+      const titleEl = document.createElement('span');
+      titleEl.className = 'note-title';
+      titleEl.textContent = headingTitle;
+      meta.appendChild(titleEl);
+    }
+    const time = document.createElement('span');
+    time.className = 'note-time';
+    time.textContent = formatTime(note.savedAt);
+
+    const pin = document.createElement('button');
+    pin.className = 'note-pin';
+    pin.title = note.pinned ? 'Unpin note' : 'Pin note';
+    pin.setAttribute('aria-label', note.pinned ? 'Unpin note' : 'Pin note');
+    pin.setAttribute('aria-pressed', note.pinned ? 'true' : 'false');
+    pin.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76V6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4.76a2 2 0 0 0 1.11 1.79l1.78.89A2 2 0 0 1 19 15.24V16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-.76a2 2 0 0 1 1.11-1.79l1.78-.89A2 2 0 0 0 9 10.76z"/></svg>';
+    pin.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePin(note);
+    });
+
+    const del = document.createElement('button');
+    del.className = 'note-delete';
+    del.title = 'Delete note';
+    del.setAttribute('aria-label', 'Delete note');
+    del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+    del.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const label = firstHeadingTitle(note.content) || deriveTitle(note.content) || 'this note';
+      const ok = await confirmDialog({
+        title: 'Delete note?',
+        message: '“' + label + '” will be permanently removed.',
+        confirmLabel: 'Delete',
+        danger: true,
+      });
+      if (!ok) return;
+      notes = notes.filter(n => n.id !== note.id);
+      if (activeNoteId === note.id) activeNoteId = null;
+      saveNotes();
+      renderNotesList();
+    });
+    meta.appendChild(time);
+    meta.appendChild(pin);
+    meta.appendChild(del);
+
+    const preview = document.createElement('div');
+    preview.className = 'note-preview';
+    preview.innerHTML = notePreviewHtml(note.content, !!headingTitle);
+
+    card.appendChild(meta);
+    card.appendChild(preview);
+    card.addEventListener('click', () => {
+      activeNoteId = note.id;
+      lastText = note.content;
+      render(note.content);
+      renderNotesList();
+    });
+    return card;
+  }
+
   function renderNotesList() {
     notesList.innerHTML = '';
     if (notes.length === 0) {
@@ -1300,62 +1478,25 @@
       notesList.appendChild(empty);
       return;
     }
-    for (const note of notes) {
-      const card = document.createElement('div');
-      card.className = 'note-card' + (note.id === activeNoteId ? ' active' : '');
-      card.title = noteTitle(note.content);
-      card.dataset.id = note.id;
+    const pinned = notes
+      .filter(n => n.pinned)
+      .sort((a, b) => (b.pinnedAt || 0) - (a.pinnedAt || 0));
+    const unpinned = notes.filter(n => !n.pinned);
 
-      const headingTitle = firstHeadingTitle(note.content);
-
-      const meta = document.createElement('div');
-      meta.className = 'note-meta';
-      if (headingTitle) {
-        const titleEl = document.createElement('span');
-        titleEl.className = 'note-title';
-        titleEl.textContent = headingTitle;
-        meta.appendChild(titleEl);
-      }
-      const time = document.createElement('span');
-      time.className = 'note-time';
-      time.textContent = formatTime(note.savedAt);
-      const del = document.createElement('button');
-      del.className = 'note-delete';
-      del.title = 'Delete note';
-      del.setAttribute('aria-label', 'Delete note');
-      del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
-      del.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const label = firstHeadingTitle(note.content) || deriveTitle(note.content) || 'this note';
-        const ok = await confirmDialog({
-          title: 'Delete note?',
-          message: '“' + label + '” will be permanently removed.',
-          confirmLabel: 'Delete',
-          danger: true,
-        });
-        if (!ok) return;
-        notes = notes.filter(n => n.id !== note.id);
-        if (activeNoteId === note.id) activeNoteId = null;
-        saveNotes();
-        renderNotesList();
-      });
-      meta.appendChild(time);
-      meta.appendChild(del);
-
-      const preview = document.createElement('div');
-      preview.className = 'note-preview';
-      preview.innerHTML = notePreviewHtml(note.content, !!headingTitle);
-
-      card.appendChild(meta);
-      card.appendChild(preview);
-      card.addEventListener('click', () => {
-        activeNoteId = note.id;
-        lastText = note.content;
-        render(note.content);
-        renderNotesList();
-      });
-      notesList.appendChild(card);
+    if (pinned.length > 0) {
+      const pinnedDivider = document.createElement('div');
+      pinnedDivider.className = 'notes-divider';
+      pinnedDivider.textContent = 'Pinned';
+      notesList.appendChild(pinnedDivider);
     }
+    for (const note of pinned) notesList.appendChild(buildNoteCard(note));
+    if (pinned.length > 0 && unpinned.length > 0) {
+      const divider = document.createElement('div');
+      divider.className = 'notes-divider';
+      divider.textContent = 'Notes';
+      notesList.appendChild(divider);
+    }
+    for (const note of unpinned) notesList.appendChild(buildNoteCard(note));
   }
 
   function saveCurrentNote() {
