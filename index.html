@@ -283,7 +283,9 @@
 
   .notes-list {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 10px;
     display: flex;
     flex-direction: column;
@@ -1257,8 +1259,27 @@
   setSidebarWidth(savedW || BASE_W);
 
   let resizing = false;
+  let resizeAnchor = null;
+
+  function captureResizeAnchor() {
+    const listTop = notesList.getBoundingClientRect().top;
+    for (const child of notesList.children) {
+      const r = child.getBoundingClientRect();
+      if (r.bottom > listTop + 1) {
+        return { el: child, offset: child.offsetTop - notesList.scrollTop };
+      }
+    }
+    return null;
+  }
+
+  function restoreResizeAnchor() {
+    if (!resizeAnchor || !resizeAnchor.el.isConnected) return;
+    notesList.scrollTop = resizeAnchor.el.offsetTop - resizeAnchor.offset;
+  }
+
   sidebarResize.addEventListener('mousedown', (e) => {
     resizing = true;
+    resizeAnchor = captureResizeAnchor();
     sidebar.classList.add('resizing');
     document.body.style.cursor = 'ew-resize';
     e.preventDefault();
@@ -1266,6 +1287,7 @@
   window.addEventListener('mousemove', (e) => {
     if (!resizing) return;
     setSidebarWidth(e.clientX);
+    restoreResizeAnchor();
   });
   window.addEventListener('mouseup', () => {
     if (!resizing) return;
