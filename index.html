@@ -634,6 +634,40 @@
     outline-offset: 2px;
   }
 
+  /* --- Share dialog --- */
+  .share-row {
+    display: flex;
+    gap: 6px;
+    margin: 0 0 14px;
+  }
+  .share-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: 12px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--fg);
+    outline: none;
+  }
+  .share-input:focus {
+    border-color: var(--accent);
+  }
+  .modal-actions .tb-btn.primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+  .modal-actions .tb-btn.primary:hover {
+    background: var(--accent);
+    filter: brightness(1.08);
+  }
+  .share-error {
+    color: #b91c1c;
+    font-size: 12.5px;
+    margin: -8px 0 12px;
+  }
+
   /* --- Main reading area --- */
   main {
     margin: 0 auto;
@@ -902,6 +936,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
       Save
     </button>
+    <button class="tb-btn" id="shareBtn" title="Share current note as a link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      Share
+    </button>
   </div>
 
   <div class="tb-group" id="widthGroup" aria-label="Reading width">
@@ -926,6 +964,26 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     </button>
     <button class="tb-btn" data-theme="auto" role="radio" title="Match system">Auto</button>
+  </div>
+</div>
+
+<!-- Share modal -->
+<div class="modal hidden" id="shareModal" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
+  <div class="modal-backdrop" id="shareModalBackdrop"></div>
+  <div class="modal-card">
+    <h3 class="modal-title" id="shareModalTitle">Share note</h3>
+    <p class="modal-message">Anyone with this link can view the note. The content is embedded in the link itself.</p>
+    <div class="share-row">
+      <input type="text" class="share-input" id="shareLink" readonly aria-label="Shareable link" />
+      <button class="tb-btn primary" id="shareCopyBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy
+      </button>
+    </div>
+    <p class="share-error" id="shareError" hidden></p>
+    <div class="modal-actions">
+      <button class="tb-btn" id="shareClose" type="button">Close</button>
+    </div>
   </div>
 </div>
 
@@ -972,6 +1030,7 @@
   const sidebarSaveBtn = document.getElementById('sidebarSaveBtn');
   const sidebarResize = document.getElementById('sidebarResize');
   const saveBtn = document.getElementById('saveBtn');
+  const shareBtn = document.getElementById('shareBtn');
   const notesList = document.getElementById('notesList');
 
   // ---------- Setting ----------
@@ -1529,12 +1588,103 @@
     const has = !!(lastText && lastText.trim());
     saveBtn.disabled = !has;
     sidebarSaveBtn.disabled = !has;
+    shareBtn.disabled = !has;
+  }
+
+  // ---------- Share ----------
+  // Encode/decode the note as base64url in the URL hash. The hash stays
+  // client-side (never sent to the server) and supports arbitrarily long
+  // notes within browser URL limits.
+  function encodeNote(text) {
+    const bytes = new TextEncoder().encode(text);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function decodeNote(encoded) {
+    let s = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    const bin = atob(s);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  const shareModal = document.getElementById('shareModal');
+  const shareModalBackdrop = document.getElementById('shareModalBackdrop');
+  const shareLinkInput = document.getElementById('shareLink');
+  const shareCopyBtn = document.getElementById('shareCopyBtn');
+  const shareCloseBtn = document.getElementById('shareClose');
+  const shareError = document.getElementById('shareError');
+  let shareKeyHandler = null;
+
+  function openShare() {
+    if (!lastText || !lastText.trim()) return;
+    const encoded = encodeNote(lastText);
+    const base = location.origin + location.pathname + location.search;
+    shareLinkInput.value = base + '#note=' + encoded;
+    shareError.hidden = true;
+    shareCopyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy';
+    shareModal.classList.remove('hidden');
+    setTimeout(() => { shareLinkInput.focus(); shareLinkInput.select(); }, 0);
+    shareKeyHandler = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); closeShare(); }
+    };
+    document.addEventListener('keydown', shareKeyHandler);
+  }
+  function closeShare() {
+    shareModal.classList.add('hidden');
+    if (shareKeyHandler) {
+      document.removeEventListener('keydown', shareKeyHandler);
+      shareKeyHandler = null;
+    }
+  }
+  async function copyShareLink() {
+    const link = shareLinkInput.value;
+    shareError.hidden = true;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        shareLinkInput.select();
+        if (!document.execCommand('copy')) throw new Error('copy failed');
+      }
+      shareCopyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied';
+    } catch {
+      shareError.textContent = 'Could not copy to clipboard. Select the link and copy manually.';
+      shareError.hidden = false;
+      shareLinkInput.select();
+    }
+  }
+
+  shareBtn.addEventListener('click', openShare);
+  shareCopyBtn.addEventListener('click', copyShareLink);
+  shareCloseBtn.addEventListener('click', closeShare);
+  shareModalBackdrop.addEventListener('click', closeShare);
+
+  // If the page loads with a #note=... hash, decode and render it, then
+  // clean the URL so the encoded payload disappears from the address bar.
+  function loadFromHash() {
+    const h = location.hash;
+    if (!h || h.length < 2) return false;
+    const m = /^#note=(.+)$/.exec(h);
+    if (!m) return false;
+    try {
+      const text = decodeNote(m[1]);
+      lastText = text;
+      render(text);
+      history.replaceState(null, '', location.pathname + location.search);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // Restore last sidebar state.
   if (localStorage.getItem(SIDEBAR_KEY) === '1') setSidebarOpen(true);
   renderNotesList();
   refreshSaveButtons();
+  loadFromHash();
 
   // ---------- Manual paste ----------
   // Ctrl+V / Cmd+V anywhere on the page renders the pasted Markdown. Uses the
