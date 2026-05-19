@@ -1113,7 +1113,7 @@
       sidebarToggle.classList.add('hidden');
     }, IDLE_MS);
   }
-  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel'].forEach(evt => {
+  ['mousemove', 'mousedown', 'keydown', 'wheel'].forEach(evt => {
     window.addEventListener(evt, bump, { passive: true });
   });
   toolbar.addEventListener('mouseenter', () => {
@@ -1124,6 +1124,65 @@
     clearTimeout(idleTimer);
     showChrome();
   });
+
+  // On touch devices, raw touchstart fires at the start of every scroll
+  // gesture — bumping on it makes the chrome flash whenever the user just
+  // wants to scroll. Instead, show the chrome on scroll-up and on taps
+  // (a touchend with negligible movement). Horizontal swipes open or
+  // close the sidebar; vertical swipes are treated as scrolls.
+  let touchStartX = 0, touchStartY = 0;
+  let touchMoved = false;
+  let touchSwipeHandled = false;
+  const TAP_MOVE_THRESHOLD = 10;
+  const SWIPE_DIST = 60;
+  const SWIPE_RATIO = 1.5;
+  const EDGE_OPEN_ZONE = 30;
+
+  window.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) {
+      touchSwipeHandled = true;
+      touchMoved = true;
+      return;
+    }
+    const t = e.touches[0];
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchMoved = false;
+    touchSwipeHandled = false;
+  }, { passive: true });
+
+  window.addEventListener('touchmove', (e) => {
+    if (touchSwipeHandled || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+    if (Math.abs(dx) > TAP_MOVE_THRESHOLD || Math.abs(dy) > TAP_MOVE_THRESHOLD) {
+      touchMoved = true;
+    }
+    if (Math.abs(dx) > SWIPE_DIST && Math.abs(dx) > Math.abs(dy) * SWIPE_RATIO) {
+      if (dx > 0 && !sidebarOpen() && touchStartX < EDGE_OPEN_ZONE) {
+        setSidebarOpen(true);
+        touchSwipeHandled = true;
+      } else if (dx < 0 && sidebarOpen()) {
+        setSidebarOpen(false);
+        touchSwipeHandled = true;
+      }
+    }
+  }, { passive: true });
+
+  window.addEventListener('touchend', () => {
+    if (!touchMoved && !touchSwipeHandled) bump();
+  }, { passive: true });
+
+  // Show chrome when the page scrolls toward the top. Scrolling away from
+  // the top intentionally doesn't bump — the idle timer will hide things
+  // on its own.
+  let lastScrollY = window.scrollY || 0;
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY || 0;
+    if (y < lastScrollY - 2) bump();
+    lastScrollY = y;
+  }, { passive: true });
 
   // Hide immediately when the cursor leaves the window — but only if the
   // sidebar is closed; an open sidebar pins the chrome.
