@@ -198,7 +198,7 @@
   /* --- Sidebar toggle (top-left) --- */
   .sidebar-toggle {
     position: fixed;
-    top: 16px;
+    top: 12px;
     left: 16px;
     z-index: 60;
     appearance: none;
@@ -228,7 +228,7 @@
     position: fixed;
     top: 0; left: 0;
     height: 100vh;
-    width: 320px;
+    width: var(--sidebar-width, 380px);
     z-index: 55;
     background: var(--surface);
     border-right: 1px solid var(--border);
@@ -239,6 +239,32 @@
     flex-direction: column;
   }
   .sidebar.open { transform: translateX(0); }
+  .sidebar.resizing { transition: none; user-select: none; }
+
+  .sidebar-resize {
+    position: absolute;
+    top: 0; right: -4px;
+    width: 8px;
+    height: 100%;
+    cursor: ew-resize;
+    z-index: 2;
+    background: transparent;
+    transition: background 150ms ease;
+  }
+  .sidebar-resize::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    background: transparent;
+    transition: background 150ms ease;
+  }
+  .sidebar-resize:hover::after,
+  .sidebar.resizing .sidebar-resize::after {
+    background: color-mix(in srgb, var(--accent) 60%, transparent);
+  }
   .sidebar-header {
     padding: 14px 16px 12px;
     padding-left: 68px; /* leave room for the toggle button */
@@ -295,7 +321,7 @@
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 10px 12px;
+    padding: 14px 16px;
     cursor: pointer;
     transition: border-color 150ms ease, background 150ms ease;
     overflow: hidden;
@@ -310,15 +336,28 @@
   }
   .note-meta {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     gap: 8px;
+    min-width: 0;
+  }
+  .note-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .note-time {
     font-size: 11px;
     color: var(--muted);
     user-select: none;
+    flex: 0 0 auto;
+    order: 2;
   }
   .note-delete {
     appearance: none;
@@ -329,6 +368,9 @@
     padding: 2px 4px;
     cursor: pointer;
     display: inline-flex;
+    flex: 0 0 auto;
+    margin-left: auto;
+    order: 1;
     opacity: 0;
     transition: opacity 150ms ease, color 150ms ease, background 150ms ease;
   }
@@ -336,57 +378,77 @@
   .note-delete:hover { color: #ef4444; background: var(--subtle); }
   .note-delete svg { width: 13px; height: 13px; }
 
-  /* --- Note preview (rendered markdown, clipped) --- */
+  /* --- Note preview ---
+     Mirrors #output styling at a smaller base font size so the card looks
+     like a real reading window. Long lines are clipped (white-space: nowrap)
+     rather than wrapped, and the whole thing is height-clamped to ~5 lines.
+     The mask fades content out toward the right and bottom edges. */
   .note-preview {
-    /* Clamp to roughly 5 lines of body text */
-    max-height: calc(1.4em * 5 + 4px);
-    overflow: hidden;
     font-size: 13.5px;
-    line-height: 1.4;
+    line-height: 1.55;
     color: var(--fg);
+    letter-spacing: -0.003em;
+    max-height: calc(7.75em * var(--note-height-scale, 1) + 4px);
+    overflow: hidden;
     pointer-events: none; /* clicks pass through to the card */
+    -webkit-mask-image:
+      linear-gradient(to bottom, #000 0, #000 calc(100% - 32px), transparent 100%),
+      linear-gradient(to right,  #000 0, #000 calc(100% - 36px), transparent 100%);
+    mask-image:
+      linear-gradient(to bottom, #000 0, #000 calc(100% - 32px), transparent 100%),
+      linear-gradient(to right,  #000 0, #000 calc(100% - 36px), transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
   }
-  .note-preview > * {
-    margin: 0;
-  }
-  /* "Zoomed in" — render at near-document size, no shrinking */
-  .note-preview p,
-  .note-preview li,
-  .note-preview blockquote,
-  .note-preview h1, .note-preview h2, .note-preview h3,
-  .note-preview h4, .note-preview h5, .note-preview h6 {
-    margin: 0 0 0.15em;
-    /* Clip overflow — lines longer than the preview are cut off, not wrapped */
+  .note-preview > :first-child { margin-top: 0; }
+  .note-preview > :last-child { margin-bottom: 0; }
+
+  .note-preview h1, .note-preview h2,
+  .note-preview h3, .note-preview h4 {
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    margin: 0.6em 0 0.25em;
+    font-weight: 700;
     white-space: nowrap;
     overflow: hidden;
-    border: 0;
-    padding: 0;
-    font-weight: inherit;
-    font-size: inherit;
-    line-height: 1.4;
-    letter-spacing: -0.003em;
   }
-  .note-preview h1, .note-preview h2, .note-preview h3 {
-    font-weight: 700;
-    font-size: 1.02em;
+  .note-preview h1 {
+    font-size: 1.7em;
+    margin-top: 0;
+    padding-bottom: 0.18em;
+    border-bottom: 1px solid var(--border);
   }
-  .note-preview ul, .note-preview ol {
-    margin: 0;
-    padding-left: 1.2em;
+  .note-preview h2 {
+    font-size: 1.35em;
+    padding-bottom: 0.15em;
+    border-bottom: 1px solid var(--border);
+  }
+  .note-preview h3 { font-size: 1.15em; }
+  .note-preview h4 { font-size: 1.05em; }
+
+  .note-preview p {
+    margin: 0 0 0.5em;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .note-preview a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   }
   .note-preview code {
     background: var(--code-bg);
     border: 1px solid var(--code-border);
-    padding: 0 0.3em;
+    padding: 0.05em 0.3em;
     border-radius: 4px;
-    font: 0.9em/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font: 0.88em/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   .note-preview pre {
     background: var(--code-bg);
     border: 1px solid var(--code-border);
-    padding: 4px 8px;
+    padding: 6px 10px;
     border-radius: 6px;
-    margin: 0;
+    margin: 0.4em 0;
     overflow: hidden;
     white-space: nowrap;
   }
@@ -394,18 +456,55 @@
     background: transparent;
     border: 0;
     padding: 0;
-  }
-  .note-preview a {
-    color: var(--accent);
-    text-decoration: none;
+    font-size: 0.88em;
   }
   .note-preview blockquote {
+    margin: 0.4em 0;
+    padding: 0.05em 0.6em;
     border-left: 2px solid var(--border);
-    padding-left: 0.5em;
     color: var(--muted);
   }
+  .note-preview blockquote p {
+    margin: 0;
+  }
+  .note-preview ul, .note-preview ol {
+    padding-left: 1.4em;
+    margin: 0 0 0.5em;
+  }
+  .note-preview li {
+    margin: 0.1em 0;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .note-preview li > p {
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .note-preview hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 0.4em 0;
+  }
+  .note-preview table {
+    border-collapse: collapse;
+    font-size: 0.95em;
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .note-preview th, .note-preview td {
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    text-align: left;
+  }
+  .note-preview th { background: var(--subtle); font-weight: 600; }
   .note-preview img { display: none; }
-  .note-preview .katex-display { margin: 0; }
+  .note-preview .katex-display {
+    margin: 0.3em 0;
+    overflow: hidden;
+  }
+  .note-preview .katex { font-size: 1em; }
 
   /* --- Banner --- */
   .banner {
@@ -625,6 +724,7 @@
     </button>
   </div>
   <div class="notes-list" id="notesList"></div>
+  <div class="sidebar-resize" id="sidebarResize" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"></div>
 </aside>
 
 <!-- Toolbar -->
@@ -713,6 +813,7 @@
   const sidebar = document.getElementById('sidebar');
   const sidebarToggle = document.getElementById('sidebarToggle');
   const sidebarSaveBtn = document.getElementById('sidebarSaveBtn');
+  const sidebarResize = document.getElementById('sidebarResize');
   const saveBtn = document.getElementById('saveBtn');
   const notesList = document.getElementById('notesList');
 
@@ -778,11 +879,18 @@
   // ---------- Toolbar auto-hide ----------
   const IDLE_MS = 5000;
   let idleTimer;
-  function bump() {
+  // While the sidebar is open the user is actively working with notes, so
+  // the toolbar and sidebar toggle should stay visible until they close it.
+  function sidebarOpen() { return sidebar.classList.contains('open'); }
+  function showChrome() {
     body.classList.remove('idle');
     toolbar.classList.remove('hidden');
     sidebarToggle.classList.remove('hidden');
+  }
+  function bump() {
+    showChrome();
     clearTimeout(idleTimer);
+    if (sidebarOpen()) return;
     idleTimer = setTimeout(() => {
       body.classList.add('idle');
       toolbar.classList.add('hidden');
@@ -794,19 +902,17 @@
   });
   toolbar.addEventListener('mouseenter', () => {
     clearTimeout(idleTimer);
-    body.classList.remove('idle');
-    toolbar.classList.remove('hidden');
-    sidebarToggle.classList.remove('hidden');
+    showChrome();
   });
   sidebar.addEventListener('mouseenter', () => {
     clearTimeout(idleTimer);
-    body.classList.remove('idle');
-    toolbar.classList.remove('hidden');
-    sidebarToggle.classList.remove('hidden');
+    showChrome();
   });
 
-  // Hide immediately when the cursor leaves the window.
+  // Hide immediately when the cursor leaves the window — but only if the
+  // sidebar is closed; an open sidebar pins the chrome.
   function hideNow() {
+    if (sidebarOpen()) return;
     clearTimeout(idleTimer);
     body.classList.add('idle');
     toolbar.classList.add('hidden');
@@ -955,20 +1061,85 @@
     sidebar.classList.toggle('open', open);
     sidebarToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
     localStorage.setItem(SIDEBAR_KEY, open ? '1' : '0');
+    if (open) {
+      // Pin the chrome — auto-hide is disabled while the sidebar is open.
+      clearTimeout(idleTimer);
+      showChrome();
+    } else {
+      // Sidebar just closed — restart the idle countdown so things hide again.
+      bump();
+    }
   }
 
   sidebarToggle.addEventListener('click', () => {
     setSidebarOpen(!sidebar.classList.contains('open'));
   });
 
-  function notePreviewHtml(text) {
+  // ---------- Sidebar resize ----------
+  const SIDEBAR_W_KEY = 'cmv:sidebarWidth';
+  const MIN_W = 280;
+  const MAX_W = 720;
+  // Cards fill the sidebar horizontally (linear with drag). The preview's
+  // max-height grows as a sublinear power of the width ratio so the box
+  // gets taller — visibly, but more slowly than it gets wider. Text size
+  // is fixed.
+  const BASE_W = 380;
+  function setSidebarWidth(w) {
+    w = Math.max(MIN_W, Math.min(MAX_W, Math.round(w)));
+    document.documentElement.style.setProperty('--sidebar-width', w + 'px');
+    const scale = Math.pow(w / BASE_W, 0.7);
+    document.documentElement.style.setProperty('--note-height-scale', scale.toFixed(3));
+    return w;
+  }
+  const savedW = parseInt(localStorage.getItem(SIDEBAR_W_KEY), 10);
+  setSidebarWidth(savedW || BASE_W);
+
+  let resizing = false;
+  sidebarResize.addEventListener('mousedown', (e) => {
+    resizing = true;
+    sidebar.classList.add('resizing');
+    document.body.style.cursor = 'ew-resize';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!resizing) return;
+    setSidebarWidth(e.clientX);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!resizing) return;
+    resizing = false;
+    sidebar.classList.remove('resizing');
+    document.body.style.cursor = '';
+    const cur = parseInt(getComputedStyle(sidebar).width, 10);
+    if (cur) localStorage.setItem(SIDEBAR_W_KEY, String(cur));
+  });
+
+  // If the first non-blank line is an ATX heading (# .. ######), return its
+  // text. The heading is then promoted into the card's meta row and skipped
+  // when rendering the preview so it does not appear twice.
+  function firstHeadingTitle(text) {
     const lines = text.split(/\r?\n/);
-    const head = [];
-    for (let i = 0; i < lines.length && head.length < 5; i++) {
-      const trimmed = lines[i];
-      if (trimmed.trim() === '' && head.length === 0) continue;
-      head.push(trimmed);
+    for (const raw of lines) {
+      if (!raw.trim()) continue;
+      const m = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(raw);
+      return m ? m[1].trim() : null;
     }
+    return null;
+  }
+
+  function notePreviewHtml(text, skipLeadingHeading) {
+    const lines = text.split(/\r?\n/);
+    let i = 0;
+    while (i < lines.length && !lines[i].trim()) i++;
+    if (skipLeadingHeading && i < lines.length && /^\s{0,3}#{1,6}\s+/.test(lines[i])) {
+      i++;
+      while (i < lines.length && !lines[i].trim()) i++;
+    }
+    // Pre-parse generously — the visible height is constrained by CSS
+    // (max-height + fade mask), so feed enough lines that a widened sidebar
+    // has content to fill.
+    const head = [];
+    for (; i < lines.length && head.length < 12; i++) head.push(lines[i]);
     const src = head.join('\n');
     try {
       return DOMPurify.sanitize(marked.parse(src));
@@ -1006,8 +1177,16 @@
       card.title = noteTitle(note.content);
       card.dataset.id = note.id;
 
+      const headingTitle = firstHeadingTitle(note.content);
+
       const meta = document.createElement('div');
       meta.className = 'note-meta';
+      if (headingTitle) {
+        const titleEl = document.createElement('span');
+        titleEl.className = 'note-title';
+        titleEl.textContent = headingTitle;
+        meta.appendChild(titleEl);
+      }
       const time = document.createElement('span');
       time.className = 'note-time';
       time.textContent = formatTime(note.savedAt);
@@ -1028,7 +1207,7 @@
 
       const preview = document.createElement('div');
       preview.className = 'note-preview';
-      preview.innerHTML = notePreviewHtml(note.content);
+      preview.innerHTML = notePreviewHtml(note.content, !!headingTitle);
 
       card.appendChild(meta);
       card.appendChild(preview);
