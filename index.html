@@ -193,6 +193,219 @@
   /* --- Cursor idle hint --- */
   body.idle { cursor: none; }
   body.idle .toolbar { opacity: 0; transform: translateX(-50%) translateY(-8px); pointer-events: none; }
+  body.idle .sidebar-toggle { opacity: 0; transform: translateY(-8px); pointer-events: none; }
+
+  /* --- Sidebar toggle (top-left) --- */
+  .sidebar-toggle {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 60;
+    appearance: none;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    width: 40px; height: 40px;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    opacity: 1;
+    transition: opacity 400ms ease, transform 400ms ease, background 150ms ease;
+  }
+  .sidebar-toggle:hover { background: var(--subtle); }
+  .sidebar-toggle.hidden {
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
+  }
+  .sidebar-toggle svg { width: 18px; height: 18px; }
+
+  /* --- Sidebar --- */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 100vh;
+    width: 320px;
+    z-index: 55;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-header {
+    padding: 14px 16px 12px;
+    padding-left: 68px; /* leave room for the toggle button */
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 64px;
+  }
+  .sidebar-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+    flex: 1;
+  }
+  .sidebar-save {
+    appearance: none;
+    background: var(--accent);
+    color: var(--accent-fg);
+    border: none;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font: 500 12px/1 inherit;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px;
+    transition: filter 150ms ease;
+  }
+  .sidebar-save:hover { filter: brightness(1.08); }
+  .sidebar-save:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: none;
+  }
+  .sidebar-save svg { width: 12px; height: 12px; }
+
+  .notes-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .notes-empty {
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 32px 16px;
+  }
+
+  .note-card {
+    position: relative;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease;
+    overflow: hidden;
+  }
+  .note-card:hover {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+    background: color-mix(in srgb, var(--subtle) 60%, var(--bg));
+  }
+  .note-card.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  }
+  .note-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    gap: 8px;
+  }
+  .note-time {
+    font-size: 11px;
+    color: var(--muted);
+    user-select: none;
+  }
+  .note-delete {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 2px 4px;
+    cursor: pointer;
+    display: inline-flex;
+    opacity: 0;
+    transition: opacity 150ms ease, color 150ms ease, background 150ms ease;
+  }
+  .note-card:hover .note-delete { opacity: 1; }
+  .note-delete:hover { color: #ef4444; background: var(--subtle); }
+  .note-delete svg { width: 13px; height: 13px; }
+
+  /* --- Note preview (rendered markdown, clipped) --- */
+  .note-preview {
+    /* Clamp to roughly 5 lines of body text */
+    max-height: calc(1.4em * 5 + 4px);
+    overflow: hidden;
+    font-size: 13.5px;
+    line-height: 1.4;
+    color: var(--fg);
+    pointer-events: none; /* clicks pass through to the card */
+  }
+  .note-preview > * {
+    margin: 0;
+  }
+  /* "Zoomed in" — render at near-document size, no shrinking */
+  .note-preview p,
+  .note-preview li,
+  .note-preview blockquote,
+  .note-preview h1, .note-preview h2, .note-preview h3,
+  .note-preview h4, .note-preview h5, .note-preview h6 {
+    margin: 0 0 0.15em;
+    /* Clip overflow — lines longer than the preview are cut off, not wrapped */
+    white-space: nowrap;
+    overflow: hidden;
+    border: 0;
+    padding: 0;
+    font-weight: inherit;
+    font-size: inherit;
+    line-height: 1.4;
+    letter-spacing: -0.003em;
+  }
+  .note-preview h1, .note-preview h2, .note-preview h3 {
+    font-weight: 700;
+    font-size: 1.02em;
+  }
+  .note-preview ul, .note-preview ol {
+    margin: 0;
+    padding-left: 1.2em;
+  }
+  .note-preview code {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    padding: 0 0.3em;
+    border-radius: 4px;
+    font: 0.9em/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .note-preview pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    padding: 4px 8px;
+    border-radius: 6px;
+    margin: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .note-preview pre code {
+    background: transparent;
+    border: 0;
+    padding: 0;
+  }
+  .note-preview a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .note-preview blockquote {
+    border-left: 2px solid var(--border);
+    padding-left: 0.5em;
+    color: var(--muted);
+  }
+  .note-preview img { display: none; }
+  .note-preview .katex-display { margin: 0; }
 
   /* --- Banner --- */
   .banner {
@@ -397,6 +610,23 @@
 </head>
 <body>
 
+<!-- Sidebar toggle (top-left) -->
+<button class="sidebar-toggle" id="sidebarToggle" title="Toggle saved notes" aria-label="Toggle saved notes" aria-expanded="false">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar" aria-label="Saved notes">
+  <div class="sidebar-header">
+    <h3 class="sidebar-title">Saved notes</h3>
+    <button class="sidebar-save" id="sidebarSaveBtn" title="Save the current note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Save
+    </button>
+  </div>
+  <div class="notes-list" id="notesList"></div>
+</aside>
+
 <!-- Toolbar -->
 <div class="toolbar" id="toolbar" role="toolbar" aria-label="Viewer controls">
   <div class="tb-group">
@@ -404,6 +634,13 @@
       <span class="dot" id="dot"></span>
       <span id="statusText">Idle</span>
     </span>
+  </div>
+
+  <div class="tb-group">
+    <button class="tb-btn" id="saveBtn" title="Save current note to sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Save
+    </button>
   </div>
 
   <div class="tb-group">
@@ -473,6 +710,11 @@
   const banner = document.getElementById('banner');
   const bannerText = document.getElementById('bannerText');
   const bannerClose = document.getElementById('bannerClose');
+  const sidebar = document.getElementById('sidebar');
+  const sidebarToggle = document.getElementById('sidebarToggle');
+  const sidebarSaveBtn = document.getElementById('sidebarSaveBtn');
+  const saveBtn = document.getElementById('saveBtn');
+  const notesList = document.getElementById('notesList');
 
   // ---------- Setting ----------
   const PREFS_KEY = 'cmv:prefs';
@@ -539,10 +781,12 @@
   function bump() {
     body.classList.remove('idle');
     toolbar.classList.remove('hidden');
+    sidebarToggle.classList.remove('hidden');
     clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       body.classList.add('idle');
       toolbar.classList.add('hidden');
+      sidebarToggle.classList.add('hidden');
     }, IDLE_MS);
   }
   ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel'].forEach(evt => {
@@ -552,6 +796,13 @@
     clearTimeout(idleTimer);
     body.classList.remove('idle');
     toolbar.classList.remove('hidden');
+    sidebarToggle.classList.remove('hidden');
+  });
+  sidebar.addEventListener('mouseenter', () => {
+    clearTimeout(idleTimer);
+    body.classList.remove('idle');
+    toolbar.classList.remove('hidden');
+    sidebarToggle.classList.remove('hidden');
   });
 
   // Hide immediately when the cursor leaves the window.
@@ -559,6 +810,7 @@
     clearTimeout(idleTimer);
     body.classList.add('idle');
     toolbar.classList.add('hidden');
+    sidebarToggle.classList.add('hidden');
   }
   document.addEventListener('mouseleave', hideNow);
   // Fallback - mouseout with no related target = left the window.
@@ -671,13 +923,161 @@
       output.innerHTML = '';
       empty.style.display = '';
       document.title = DEFAULT_TITLE;
+      refreshSaveButtons();
       return;
     }
     empty.style.display = 'none';
     output.innerHTML = DOMPurify.sanitize(marked.parse(text));
     const title = deriveTitle(text);
     document.title = title ? title : DEFAULT_TITLE;
+    refreshSaveButtons();
+    if (activeNoteId) {
+      const active = notes.find(n => n.id === activeNoteId);
+      if (!active || active.content !== text) {
+        activeNoteId = null;
+        renderNotesList();
+      }
+    }
   }
+
+  // ---------- Saved notes ----------
+  const NOTES_KEY = 'cmv:notes';
+  const SIDEBAR_KEY = 'cmv:sidebar';
+  let notes = [];
+  try {
+    const raw = localStorage.getItem(NOTES_KEY);
+    if (raw) notes = JSON.parse(raw) || [];
+  } catch { notes = []; }
+  let activeNoteId = null;
+  const saveNotes = () => localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+
+  function setSidebarOpen(open) {
+    sidebar.classList.toggle('open', open);
+    sidebarToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    localStorage.setItem(SIDEBAR_KEY, open ? '1' : '0');
+  }
+
+  sidebarToggle.addEventListener('click', () => {
+    setSidebarOpen(!sidebar.classList.contains('open'));
+  });
+
+  function notePreviewHtml(text) {
+    const lines = text.split(/\r?\n/);
+    const head = [];
+    for (let i = 0; i < lines.length && head.length < 5; i++) {
+      const trimmed = lines[i];
+      if (trimmed.trim() === '' && head.length === 0) continue;
+      head.push(trimmed);
+    }
+    const src = head.join('\n');
+    try {
+      return DOMPurify.sanitize(marked.parse(src));
+    } catch {
+      return DOMPurify.sanitize(src);
+    }
+  }
+
+  function noteTitle(text) {
+    return deriveTitle(text) || 'Untitled note';
+  }
+
+  function formatTime(ts) {
+    const d = new Date(ts);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    if (sameDay) {
+      return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    }
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  function renderNotesList() {
+    notesList.innerHTML = '';
+    if (notes.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'notes-empty';
+      empty.textContent = 'No saved notes yet. Click Save to keep one.';
+      notesList.appendChild(empty);
+      return;
+    }
+    for (const note of notes) {
+      const card = document.createElement('div');
+      card.className = 'note-card' + (note.id === activeNoteId ? ' active' : '');
+      card.title = noteTitle(note.content);
+      card.dataset.id = note.id;
+
+      const meta = document.createElement('div');
+      meta.className = 'note-meta';
+      const time = document.createElement('span');
+      time.className = 'note-time';
+      time.textContent = formatTime(note.savedAt);
+      const del = document.createElement('button');
+      del.className = 'note-delete';
+      del.title = 'Delete note';
+      del.setAttribute('aria-label', 'Delete note');
+      del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        notes = notes.filter(n => n.id !== note.id);
+        if (activeNoteId === note.id) activeNoteId = null;
+        saveNotes();
+        renderNotesList();
+      });
+      meta.appendChild(time);
+      meta.appendChild(del);
+
+      const preview = document.createElement('div');
+      preview.className = 'note-preview';
+      preview.innerHTML = notePreviewHtml(note.content);
+
+      card.appendChild(meta);
+      card.appendChild(preview);
+      card.addEventListener('click', () => {
+        activeNoteId = note.id;
+        lastText = note.content;
+        render(note.content);
+        renderNotesList();
+      });
+      notesList.appendChild(card);
+    }
+  }
+
+  function saveCurrentNote() {
+    const text = lastText;
+    if (!text || !text.trim()) return;
+    // Avoid duplicating an identical adjacent save.
+    const existing = notes.find(n => n.content === text);
+    if (existing) {
+      existing.savedAt = Date.now();
+      activeNoteId = existing.id;
+      notes = [existing, ...notes.filter(n => n.id !== existing.id)];
+    } else {
+      const note = {
+        id: 'n_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        content: text,
+        savedAt: Date.now(),
+      };
+      notes.unshift(note);
+      activeNoteId = note.id;
+    }
+    saveNotes();
+    renderNotesList();
+    setSidebarOpen(true);
+  }
+
+  saveBtn.addEventListener('click', saveCurrentNote);
+  sidebarSaveBtn.addEventListener('click', saveCurrentNote);
+
+  function refreshSaveButtons() {
+    const has = !!(lastText && lastText.trim());
+    saveBtn.disabled = !has;
+    sidebarSaveBtn.disabled = !has;
+  }
+
+  // Restore last sidebar state.
+  if (localStorage.getItem(SIDEBAR_KEY) === '1') setSidebarOpen(true);
+  renderNotesList();
+  refreshSaveButtons();
 
   // ---------- Status ----------
   function setStatus(text, kind) {
