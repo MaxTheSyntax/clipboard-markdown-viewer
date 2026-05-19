@@ -599,6 +599,29 @@
     font: 600 12px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     color: var(--fg);
   }
+  .empty-hint-mobile { display: none; }
+  .empty-paste-btn {
+    appearance: none;
+    margin-top: 18px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    border: none;
+    border-radius: 999px;
+    padding: 10px 18px;
+    font: 500 14px/1 inherit;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    transition: filter 150ms ease;
+  }
+  .empty-paste-btn:hover { filter: brightness(1.08); }
+  .empty-paste-btn svg { width: 16px; height: 16px; }
+  .empty-paste-error {
+    color: #b91c1c;
+    font-size: 13px;
+    margin: 12px 0 0;
+  }
 
   /* --- Rendered markdown --- */
   #output {
@@ -734,6 +757,37 @@
     main { padding: 88px 18px 64px; }
     #output h1 { font-size: 1.7em; }
   }
+
+  /* Mobile / narrow viewports — hide width control, simplify chrome. */
+  @media (max-width: 700px) {
+    #widthGroup { display: none; }
+    .toolbar {
+      top: 8px;
+      padding: 4px;
+      max-width: calc(100vw - 16px);
+      gap: 2px;
+    }
+    .tb-btn { padding: 7px 9px; font-size: 12.5px; }
+    .tb-group { padding: 0 2px; }
+    .tb-group + .tb-group { margin-left: 0; padding-left: 4px; }
+    .sidebar-toggle { top: 8px; left: 8px; width: 38px; height: 38px; }
+    .sidebar { width: min(var(--sidebar-width, 380px), 92vw); }
+    .sidebar-resize { display: none; }
+    .sidebar-header { padding-left: 60px; }
+    .empty-hint-desktop { display: none; }
+    .empty-hint-mobile { display: block; }
+    .empty-paste-btn { display: inline-flex; }
+  }
+
+  /* Touch devices — the idle hint hides the cursor, which is meaningless
+     without a mouse and also makes the chrome disappear without an obvious
+     way to bring it back. Keep things visible. */
+  @media (hover: none) and (pointer: coarse) {
+    body.idle { cursor: auto; }
+    .empty-paste-btn { display: inline-flex; }
+    .empty-hint-desktop { display: none; }
+    .empty-hint-mobile { display: block; }
+  }
 </style>
 </head>
 <body>
@@ -765,7 +819,7 @@
     </button>
   </div>
 
-  <div class="tb-group" aria-label="Reading width">
+  <div class="tb-group" id="widthGroup" aria-label="Reading width">
     <span class="tb-label">Width</span>
     <input type="range" id="widthSlider" class="tb-slider" min="440" max="1400" step="20" aria-label="Reading width" />
     <span class="tb-value" id="widthValue">720</span>
@@ -809,7 +863,13 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/></svg>
     </div>
     <h2>Copy some Markdown, then paste</h2>
-    <p>Press <kbd>Ctrl</kbd>+<kbd>V</kbd> (or <kbd>Cmd</kbd>+<kbd>V</kbd>) anywhere on this page to render it.</p>
+    <p class="empty-hint-desktop">Press <kbd>Ctrl</kbd>+<kbd>V</kbd> (or <kbd>Cmd</kbd>+<kbd>V</kbd>) anywhere on this page to render it.</p>
+    <p class="empty-hint-mobile">Tap the button below to paste from your clipboard.</p>
+    <button class="empty-paste-btn" id="emptyPasteBtn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/></svg>
+      Paste from clipboard
+    </button>
+    <p class="empty-paste-error" id="emptyPasteError" hidden></p>
   </div>
   <article id="output"></article>
 </main>
@@ -1332,6 +1392,32 @@
     if (text != null) {
       lastText = text;
       render(text);
+    }
+  });
+
+  // Mobile-friendly fallback — on touch devices there is no keyboard, so the
+  // empty state offers a button that reads the clipboard via the async API.
+  const emptyPasteBtn = document.getElementById('emptyPasteBtn');
+  const emptyPasteError = document.getElementById('emptyPasteError');
+  emptyPasteBtn.addEventListener('click', async () => {
+    emptyPasteError.hidden = true;
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      emptyPasteError.textContent = 'Clipboard reading is not supported in this browser.';
+      emptyPasteError.hidden = false;
+      return;
+    }
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && text.trim()) {
+        lastText = text;
+        render(text);
+      } else {
+        emptyPasteError.textContent = 'Your clipboard is empty. Copy some Markdown first, then tap Paste again.';
+        emptyPasteError.hidden = false;
+      }
+    } catch {
+      emptyPasteError.textContent = 'Clipboard access was blocked. Allow clipboard permission and try again.';
+      emptyPasteError.hidden = false;
     }
   });
 })();
