@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Syntax's Clipboard Markdown Viewer.</title>
+<script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/common.min.js"></script>
@@ -972,7 +973,7 @@
   <div class="modal-backdrop" id="shareModalBackdrop"></div>
   <div class="modal-card">
     <h3 class="modal-title" id="shareModalTitle">Share note</h3>
-    <p class="modal-message">Anyone with this link can view the note. The content is embedded in the link itself.</p>
+    <p class="modal-message">Anyone with this link can view the note. The note is stored on the server and the link is a short ID.</p>
     <div class="share-row">
       <input type="text" class="share-input" id="shareLink" readonly aria-label="Shareable link" />
       <button class="tb-btn primary" id="shareCopyBtn" type="button">
@@ -1592,22 +1593,17 @@
   }
 
   // ---------- Share ----------
-  // Encode/decode the note as base64url in the URL hash. The hash stays
-  // client-side (never sent to the server) and supports arbitrarily long
-  // notes within browser URL limits.
-  function encodeNote(text) {
-    const bytes = new TextEncoder().encode(text);
-    let bin = '';
-    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-  function decodeNote(encoded) {
-    let s = encoded.replace(/-/g, '+').replace(/_/g, '/');
-    while (s.length % 4) s += '=';
-    const bin = atob(s);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new TextDecoder().decode(bytes);
+  // Notes are uploaded to the Amplify-backed Lambda + S3 store; the share
+  // link carries only a 16-character alphanumeric ID in the URL hash.
+  const NOTE_ID_RE = /^[A-Za-z0-9]{16}$/;
+  const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy';
+  const COPIED_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied';
+
+  function notesApiUrl() {
+    const cfg = window.APP_CONFIG || {};
+    const raw = (cfg.notesApiUrl || '').trim();
+    if (!raw) return '';
+    return raw.endsWith('/') ? raw.slice(0, -1) : raw;
   }
 
   const shareModal = document.getElementById('shareModal');
@@ -1618,29 +1614,66 @@
   const shareError = document.getElementById('shareError');
   let shareKeyHandler = null;
 
-  function openShare() {
+  function setShareModalOpen(open) {
+    if (open) {
+      shareModal.classList.remove('hidden');
+      shareKeyHandler = (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); closeShare(); }
+      };
+      document.addEventListener('keydown', shareKeyHandler);
+    } else {
+      shareModal.classList.add('hidden');
+      if (shareKeyHandler) {
+        document.removeEventListener('keydown', shareKeyHandler);
+        shareKeyHandler = null;
+      }
+    }
+  }
+
+  async function openShare() {
     if (!lastText || !lastText.trim()) return;
-    const encoded = encodeNote(lastText);
-    const base = location.origin + location.pathname + location.search;
-    shareLinkInput.value = base + '#note=' + encoded;
+    const api = notesApiUrl();
     shareError.hidden = true;
-    shareCopyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy';
-    shareModal.classList.remove('hidden');
-    setTimeout(() => { shareLinkInput.focus(); shareLinkInput.select(); }, 0);
-    shareKeyHandler = (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); closeShare(); }
-    };
-    document.addEventListener('keydown', shareKeyHandler);
+    shareCopyBtn.innerHTML = COPY_ICON;
+    shareCopyBtn.disabled = true;
+    shareLinkInput.value = '';
+    shareLinkInput.placeholder = 'Uploading…';
+    setShareModalOpen(true);
+    if (!api) {
+      shareError.textContent = 'Sharing is not configured for this deployment.';
+      shareError.hidden = false;
+      shareLinkInput.placeholder = '';
+      return;
+    }
+    try {
+      const res = await fetch(api + '/notes', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: lastText }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.error || ('HTTP ' + res.status));
+      }
+      const { id } = await res.json();
+      if (!NOTE_ID_RE.test(id || '')) throw new Error('invalid id from server');
+      const base = location.origin + location.pathname + location.search;
+      shareLinkInput.value = base + '#id=' + id;
+      shareLinkInput.placeholder = '';
+      shareCopyBtn.disabled = false;
+      setTimeout(() => { shareLinkInput.focus(); shareLinkInput.select(); }, 0);
+    } catch (err) {
+      shareError.textContent = 'Could not create share link: ' + (err && err.message ? err.message : 'unknown error');
+      shareError.hidden = false;
+      shareLinkInput.placeholder = '';
+    }
   }
   function closeShare() {
-    shareModal.classList.add('hidden');
-    if (shareKeyHandler) {
-      document.removeEventListener('keydown', shareKeyHandler);
-      shareKeyHandler = null;
-    }
+    setShareModalOpen(false);
   }
   async function copyShareLink() {
     const link = shareLinkInput.value;
+    if (!link) return;
     shareError.hidden = true;
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1649,7 +1682,7 @@
         shareLinkInput.select();
         if (!document.execCommand('copy')) throw new Error('copy failed');
       }
-      shareCopyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied';
+      shareCopyBtn.innerHTML = COPIED_ICON;
     } catch {
       shareError.textContent = 'Could not copy to clipboard. Select the link and copy manually.';
       shareError.hidden = false;
@@ -1662,15 +1695,21 @@
   shareCloseBtn.addEventListener('click', closeShare);
   shareModalBackdrop.addEventListener('click', closeShare);
 
-  // If the page loads with a #note=... hash, decode and render it, then
-  // clean the URL so the encoded payload disappears from the address bar.
-  function loadFromHash() {
+  // If the page loads with a #id=XXXX hash, fetch the note from the backend
+  // and render it, then clean the URL so the ID disappears from the address bar.
+  async function loadFromHash() {
     const h = location.hash;
     if (!h || h.length < 2) return false;
-    const m = /^#note=(.+)$/.exec(h);
+    const m = /^#id=([A-Za-z0-9]{16})$/.exec(h);
     if (!m) return false;
+    const id = m[1];
+    const api = notesApiUrl();
+    if (!api) return false;
     try {
-      const text = decodeNote(m[1]);
+      const res = await fetch(api + '/notes/' + id, { method: 'GET' });
+      if (!res.ok) return false;
+      const { text } = await res.json();
+      if (typeof text !== 'string') return false;
       lastText = text;
       render(text);
       history.replaceState(null, '', location.pathname + location.search);
@@ -1684,7 +1723,7 @@
   if (localStorage.getItem(SIDEBAR_KEY) === '1') setSidebarOpen(true);
   renderNotesList();
   refreshSaveButtons();
-  loadFromHash();
+  loadFromHash().then(loaded => { if (loaded) refreshSaveButtons(); });
 
   // ---------- Manual paste ----------
   // Ctrl+V / Cmd+V anywhere on the page renders the pasted Markdown. Uses the
