@@ -1,5 +1,6 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { Duration } from 'aws-cdk-lib';
+import { AnyPrincipal } from 'aws-cdk-lib/aws-iam';
 import { FunctionUrlAuthType, HttpMethod, InvokeMode } from 'aws-cdk-lib/aws-lambda';
 import { notesStorage } from './storage/resource.js';
 import { notesFunction } from './functions/notes/resource.js';
@@ -24,6 +25,14 @@ const fnUrl = lambda.addFunctionUrl({
     allowedHeaders: ['content-type'],
     maxAge: Duration.seconds(86400),
   },
+});
+
+// Amplify's nested-stack wrapping can drop the implicit public-invoke grant
+// that addFunctionUrl normally attaches for AuthType.NONE. Add it explicitly.
+lambda.addPermission('AllowPublicFunctionUrlInvoke', {
+  principal: new AnyPrincipal(),
+  action: 'lambda:InvokeFunctionUrl',
+  functionUrlAuthType: FunctionUrlAuthType.NONE,
 });
 
 backend.addOutput({
