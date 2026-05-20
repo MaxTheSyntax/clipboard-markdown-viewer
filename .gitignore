@@ -1,7 +1,14 @@
-# wrangler files
-.wrangler
-.dev.vars*
-!.dev.vars.example
+# Amplify
+node_modules/
+.amplify/
+amplify_outputs.json
+amplify_outputs.*.json
+amplifyconfiguration.json
+amplifyconfiguration.dart
+amplifyconfiguration.ts
+config.js
+
+# Env
 .env*
 !.env.example
 
