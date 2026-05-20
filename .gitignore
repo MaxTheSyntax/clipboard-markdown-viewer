@@ -1,5 +1,8 @@
-# Amplify
+# Node
 node_modules/
+.npm/
+
+# Amplify
 .amplify/
 amplify_outputs.json
 amplify_outputs.*.json
