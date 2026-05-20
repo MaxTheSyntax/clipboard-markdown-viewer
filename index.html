@@ -1583,6 +1583,7 @@
       lastText = note.content;
       render(note.content);
       renderNotesList();
+      if (window.matchMedia('(max-width: 700px)').matches) setSidebarOpen(false);
     });
     return card;
   }
