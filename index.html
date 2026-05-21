@@ -204,6 +204,28 @@
   }
   .sidebar-toggle svg { width: 18px; height: 18px; }
 
+  /* --- Edge swipe grabber (touch only) ---
+     Browsers (notably iOS Safari) reserve the very-left edge for their
+     own back-swipe gesture, which hijacks horizontal swipes before the
+     page sees them. This thin transparent strip claims those touches
+     with `touch-action: pan-y`, so the page can interpret them as a
+     sidebar-open gesture. Vertical scrolling still passes through. */
+  .edge-grab {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 22px;
+    height: 100vh;
+    z-index: 56;
+    background: transparent;
+    touch-action: pan-y;
+    display: none;
+  }
+  @media (hover: none) and (pointer: coarse) {
+    .edge-grab { display: block; }
+  }
+  .edge-grab.hidden { display: none; }
+
   /* --- Sidebar --- */
   .sidebar {
     position: fixed;
@@ -930,6 +952,11 @@
   <div class="sidebar-resize" id="sidebarResize" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"></div>
 </aside>
 
+<!-- Left-edge swipe grabber (visible to touch only). Catches the touch
+     before the OS/browser back-swipe gesture so the page can drive a
+     sidebar-open swipe. -->
+<div class="edge-grab" id="edgeGrab" aria-hidden="true"></div>
+
 <!-- Toolbar -->
 <div class="toolbar" id="toolbar" role="toolbar" aria-label="Viewer controls">
   <div class="tb-group">
@@ -1033,6 +1060,7 @@
   const saveBtn = document.getElementById('saveBtn');
   const shareBtn = document.getElementById('shareBtn');
   const notesList = document.getElementById('notesList');
+  const edgeGrab = document.getElementById('edgeGrab');
 
   // ---------- Setting ----------
   const PREFS_KEY = 'cmv:prefs';
@@ -1135,9 +1163,9 @@
   let touchMoved = false;
   let touchSwipeHandled = false;
   const TAP_MOVE_THRESHOLD = 10;
-  const SWIPE_DIST = 60;
-  const SWIPE_RATIO = 1.5;
-  const EDGE_OPEN_ZONE = 30;
+  const SWIPE_DIST = 40;
+  const SWIPE_RATIO = 1.2;
+  const EDGE_OPEN_ZONE = 50;
 
   window.addEventListener('touchstart', (e) => {
     if (e.touches.length !== 1) {
@@ -1174,6 +1202,33 @@
   window.addEventListener('touchend', () => {
     if (!touchMoved && !touchSwipeHandled) bump();
   }, { passive: true });
+
+  // Dedicated swipe-from-edge handler. The window-level touchmove above
+  // is unreliable for opens because the OS edge-swipe gesture often
+  // wins before our threshold trips. Touches that start inside the
+  // grabber bypass that race entirely.
+  let edgeStartX = 0, edgeStartY = 0;
+  let edgeActive = false;
+  edgeGrab.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) { edgeActive = false; return; }
+    const t = e.touches[0];
+    edgeStartX = t.clientX;
+    edgeStartY = t.clientY;
+    edgeActive = true;
+  }, { passive: true });
+  edgeGrab.addEventListener('touchmove', (e) => {
+    if (!edgeActive || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const dx = t.clientX - edgeStartX;
+    const dy = t.clientY - edgeStartY;
+    if (dx > 30 && Math.abs(dx) > Math.abs(dy)) {
+      setSidebarOpen(true);
+      edgeActive = false;
+    }
+  }, { passive: true });
+  const endEdge = () => { edgeActive = false; };
+  edgeGrab.addEventListener('touchend', endEdge, { passive: true });
+  edgeGrab.addEventListener('touchcancel', endEdge, { passive: true });
 
   // Show chrome when the page scrolls toward the top. Scrolling away from
   // the top intentionally doesn't bump — the idle timer will hide things
@@ -1382,6 +1437,7 @@
   function setSidebarOpen(open) {
     sidebar.classList.toggle('open', open);
     sidebarToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    edgeGrab.classList.toggle('hidden', open);
     localStorage.setItem(SIDEBAR_KEY, open ? '1' : '0');
     if (open) {
       // Pin the chrome — auto-hide is disabled while the sidebar is open.
